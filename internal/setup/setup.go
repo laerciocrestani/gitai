@@ -7,51 +7,86 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/laerciocrestani/gitia/internal/ui"
 )
 
 const moduleID = "github.com/laerciocrestani/gitia"
 
 func Install() error {
-	if err := requireGo(); err != nil {
-		return err
-	}
-	checkOptionalTools()
+	sess := ui.New("install", false)
+	sess.Header()
 
-	root, err := FindRepoRoot()
-	if err != nil {
-		return err
-	}
-
-	info("Instalando gitia...")
-	if err := goInstall(root); err != nil {
+	if err := sess.Step("Checking Go toolchain", func() error {
+		return requireGo(sess)
+	}); err != nil {
 		return err
 	}
 
-	bin, err := GitiaBin()
-	if err != nil {
-		return fmt.Errorf("instalação falhou — binário não encontrado em %s", GoBinDir())
-	}
-	ok("gitia instalado em %s", bin)
+	sess.Step("Checking optional tools", func() error {
+		checkOptionalTools(sess)
+		return nil
+	})
 
-	if err := EnsurePath(); err != nil {
+	var root string
+	if err := sess.Step("Locating repository", func() error {
+		var err error
+		root, err = FindRepoRoot()
+		return err
+	}); err != nil {
 		return err
 	}
 
-	fmt.Println()
-	ok("Instalação concluída!")
-	info("Próximo passo: gitia config")
-	info("Teste: %s --help", bin)
+	if err := sess.Step("Building binary", func() error {
+		return goInstall(root)
+	}); err != nil {
+		return err
+	}
+
+	var bin string
+	if err := sess.Step("Verifying installation", func() error {
+		var err error
+		bin, err = GitiaBin()
+		if err != nil {
+			return fmt.Errorf("instalação falhou — binário não encontrado em %s", GoBinDir())
+		}
+		sess.Detail(bin)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := sess.Step("Configuring PATH", func() error {
+		return ensurePath(sess)
+	}); err != nil {
+		return err
+	}
+
+	sess.Detail("Próximo passo: gitia config")
+	sess.Success("Installation complete 🚀")
 	return nil
 }
 
 func Update() error {
-	if err := requireGo(); err != nil {
+	sess := ui.New("update", false)
+	sess.Header()
+
+	if err := sess.Step("Checking Go toolchain", func() error {
+		return requireGo(sess)
+	}); err != nil {
 		return err
 	}
 
-	root, err := FindRepoRoot()
-	if err != nil {
-		return fmt.Errorf("rode update dentro do clone do repositório gitia")
+	var root string
+	if err := sess.Step("Locating repository", func() error {
+		var err error
+		root, err = FindRepoRoot()
+		if err != nil {
+			return fmt.Errorf("rode update dentro do clone do repositório gitia")
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	before, err := gitShortHash(root)
@@ -64,14 +99,22 @@ func Update() error {
 		return err
 	}
 
-	info("Atualizando branch %q...", branch)
-	if err := gitRun(root, "fetch", "origin", branch); err != nil {
-		_ = gitRun(root, "fetch", "origin")
-	}
-	if err := gitRun(root, "pull", "--ff-only", "origin", branch); err != nil {
-		if err := gitRun(root, "pull", "--ff-only"); err != nil {
-			return err
+	if err := sess.Step("Fetching updates", func() error {
+		if err := gitRun(root, "fetch", "origin", branch); err != nil {
+			_ = gitRun(root, "fetch", "origin")
 		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := sess.Step("Pulling changes", func() error {
+		if err := gitRun(root, "pull", "--ff-only", "origin", branch); err != nil {
+			return gitRun(root, "pull", "--ff-only")
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	after, err := gitShortHash(root)
@@ -79,8 +122,9 @@ func Update() error {
 		return err
 	}
 
-	info("Reinstalando binário...")
-	if err := goInstall(root); err != nil {
+	if err := sess.Step("Rebuilding binary", func() error {
+		return goInstall(root)
+	}); err != nil {
 		return err
 	}
 
@@ -88,19 +132,17 @@ func Update() error {
 	if err != nil {
 		return fmt.Errorf("reinstalação falhou")
 	}
-	ok("gitia atualizado em %s", bin)
 
 	if before == after {
-		info("Já estava na versão mais recente (%s)", after)
+		sess.Info(fmt.Sprintf("Already on latest version (%s)", after))
 	} else {
-		ok("Atualizado: %s → %s", before, after)
+		sess.Detail(fmt.Sprintf("%s → %s", before, after))
 		if line, err := gitOutput(root, "log", "-1", "--oneline"); err == nil {
-			fmt.Println(line)
+			sess.Detail(line)
 		}
 	}
-
-	fmt.Println()
-	info("Teste: %s --help", bin)
+	sess.Detail(bin)
+	sess.Success("Update complete 🚀")
 	return nil
 }
 
@@ -156,28 +198,27 @@ func GitiaBin() (string, error) {
 	return "", fmt.Errorf("binário não encontrado")
 }
 
-func EnsurePath() error {
+func ensurePath(sess *ui.Session) error {
 	goBin := GoBinDir()
 	if pathContains(goBin) {
-		ok("PATH já inclui %s", goBin)
+		sess.Detail("PATH already includes " + goBin)
 		return nil
 	}
 
 	shellRC := shellRCFile()
 	if shellRC != "" {
 		if data, err := os.ReadFile(shellRC); err == nil && strings.Contains(string(data), goBin) {
-			ok("Entrada PATH já existe em %s", shellRC)
+			sess.Detail("PATH entry already exists in " + shellRC)
 			return nil
 		}
 	}
 
 	if shellRC == "" {
-		warn("Não foi possível detectar ~/.zshrc ou ~/.bashrc")
-		info("Adicione manualmente ao PATH: export PATH=\"$PATH:%s\"", goBin)
+		sess.Warn("Could not detect ~/.zshrc or ~/.bashrc")
+		sess.Detail(`Add manually: export PATH="$PATH:` + goBin + `"`)
 		return nil
 	}
 
-	info("Adicionando %s ao PATH em %s", goBin, shellRC)
 	f, err := os.OpenFile(shellRC, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
@@ -189,8 +230,8 @@ func EnsurePath() error {
 		return err
 	}
 
-	ok("PATH configurado. Rode: source %s", shellRC)
-	warn("Ou abra um novo terminal antes de usar gitia")
+	sess.Detail("Added to " + shellRC)
+	sess.Warn("Run: source " + shellRC)
 	return nil
 }
 
@@ -202,29 +243,29 @@ func goInstall(root string) error {
 	return cmd.Run()
 }
 
-func requireGo() error {
+func requireGo(sess *ui.Session) error {
 	if _, err := exec.LookPath("go"); err != nil {
 		return fmt.Errorf("Go não encontrado — instale em https://go.dev/dl/")
 	}
 	if out, err := exec.Command("go", "env", "GOVERSION").Output(); err == nil {
-		info("Go %s detectado", strings.TrimPrefix(strings.TrimSpace(string(out)), "go"))
+		sess.Detail(strings.TrimPrefix(strings.TrimSpace(string(out)), "go"))
 	}
 	return nil
 }
 
-func checkOptionalTools() {
+func checkOptionalTools(sess *ui.Session) {
 	if _, err := exec.LookPath("git"); err != nil {
-		warn("git não encontrado — necessário para usar o gitia")
+		sess.Warn("git not found — required for gitia")
 	}
 	if _, err := exec.LookPath("gh"); err != nil {
-		warn("gh não encontrado — necessário apenas para gitia pr (https://cli.github.com/)")
+		sess.Warn("gh not found — required only for gitia pr")
 		return
 	}
 	cmd := exec.Command("gh", "auth", "status")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
-		warn("gh não autenticado — rode: gh auth login")
+		sess.Warn("gh not authenticated — run: gh auth login")
 	}
 }
 
@@ -281,16 +322,4 @@ func binaryName() string {
 		return "gitia.exe"
 	}
 	return "gitia"
-}
-
-func info(format string, args ...any) {
-	fmt.Printf("→ "+format+"\n", args...)
-}
-
-func ok(format string, args ...any) {
-	fmt.Printf("✓ "+format+"\n", args...)
-}
-
-func warn(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "! "+format+"\n", args...)
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/laerciocrestani/gitia/internal/config"
 	gitpkg "github.com/laerciocrestani/gitia/internal/git"
 	"github.com/laerciocrestani/gitia/internal/setup"
+	"github.com/laerciocrestani/gitia/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +25,8 @@ func main() {
 		Use:   "gitia",
 		Short: "CLI para commit/PR com IA barata",
 		Long:  "Gera conventional commits a partir de git diff usando IA configurável e integra com gh pr create.",
+		RunE:  runOverview,
+		Args:  cobra.NoArgs,
 	}
 
 	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "simula sem executar git/gh")
@@ -56,6 +59,9 @@ func main() {
 		Use:   "status",
 		Short: "Alias para git status",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			sess := ui.New("status", false)
+			sess.Header()
+
 			repo, err := gitpkg.New()
 			if err != nil {
 				return err
@@ -63,7 +69,15 @@ func main() {
 			if err := repo.IsRepo(); err != nil {
 				return fmt.Errorf("diretório atual não é um repositório git")
 			}
-			return repo.Status(args...)
+
+			sess.Info("Reading repository status...")
+			fmt.Println()
+			if err := repo.Status(args...); err != nil {
+				return err
+			}
+			fmt.Println()
+			sess.Success("Status ready 📋")
+			return nil
 		},
 	}
 
@@ -105,11 +119,15 @@ func main() {
 		Use:   "show",
 		Short: "Exibe configuração atual (API key mascarada)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			sess := ui.New("config", false)
+			sess.Header()
+
 			cfg, err := config.Load()
 			if err != nil {
 				return err
 			}
 			fmt.Print(cfg.Display())
+			sess.Success("Configuration loaded ✨")
 			return nil
 		},
 	}
@@ -130,6 +148,10 @@ func opts() app.Options {
 		Base:    base,
 		Verbose: verbose,
 	}
+}
+
+func runOverview(cmd *cobra.Command, args []string) error {
+	return app.RunOverview()
 }
 
 func runCommit(cmd *cobra.Command, args []string) error {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/laerciocrestani/gitia/internal/config"
+	"github.com/laerciocrestani/gitia/internal/ui"
 )
 
 type UsageRecord struct {
@@ -37,27 +38,48 @@ func (s UsageSummary) Totals() (prompt, completion, total int, costUSD float64, 
 }
 
 func (s UsageSummary) Print() {
-	if len(s.Records) == 0 {
+	s.PrintWith(nil)
+}
+
+func (s UsageSummary) PrintWith(sess *ui.Session) {
+	lines := s.FormatLines()
+	if len(lines) == 0 {
 		return
 	}
-
+	if sess != nil {
+		sess.UsageBlock(lines)
+		return
+	}
 	fmt.Println("--- Uso de IA ---")
+	for _, line := range lines {
+		fmt.Println(line)
+	}
+}
+
+func (s UsageSummary) FormatLines() []string {
+	if len(s.Records) == 0 {
+		return nil
+	}
+
+	lines := make([]string, 0, len(s.Records)+1)
 	for _, r := range s.Records {
-		fmt.Printf("%s: %d prompt + %d completion = %d tokens",
+		line := fmt.Sprintf("%s: %d prompt + %d completion = %d tokens",
 			r.Label, r.PromptTokens, r.CompletionTokens, r.TotalTokens)
 		if r.CostUSD != nil {
-			fmt.Printf(" | %s", formatCost(*r.CostUSD, r.CostSource))
+			line += " | " + formatCost(*r.CostUSD, r.CostSource)
 		}
-		fmt.Println()
+		lines = append(lines, line)
 	}
 
 	p, c, t, cost, hasCost := s.Totals()
-	fmt.Printf("Total: %d prompt + %d completion = %d tokens", p, c, t)
+	total := fmt.Sprintf("Total: %d prompt + %d completion = %d tokens", p, c, t)
 	if hasCost {
-		fmt.Printf(" | custo total: $%.6f USD\n", cost)
+		total += fmt.Sprintf(" | custo total: $%.6f USD", cost)
 	} else {
-		fmt.Println(" | custo: não informado (use openrouter ou configure input_price_per_1m / output_price_per_1m)")
+		total += " | custo: não informado"
 	}
+	lines = append(lines, total)
+	return lines
 }
 
 func formatCost(cost float64, source string) string {

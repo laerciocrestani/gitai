@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="avatar.png" alt="Gitia" width="160">
+</p>
+
 # gitia
 
 CLI em Go para gerar **Conventional Commits** com IA barata, automatizar **push** e criar **Pull Requests detalhados** via GitHub CLI.
@@ -272,16 +276,29 @@ A API key é **mascarada** na saída (ex.: `sk-o...abcd`).
 
 ## Referência de comandos
 
+Rodar **`gitia` sem subcomando** exibe um **overview** do repositório (comando padrão):
+
+- path, remote e branch atual
+- sync com upstream (↑ ahead / ↓ behind)
+- **PR aberto** na branch (via `gh`)
+- working tree (staged, modified, untracked)
+- **arquivos alterados** com status e `+/-` linhas
+- **stash** pendente(s)
+- branches locais com tracking
+- últimos 5 commits
+- config do gitia (provider, model)
+- sugestões do próximo passo (`gitia commit`, `gitia pr`, `git stash pop`, etc.)
+
 ```
-gitia
-├── update          git pull + reinstala o binário
-├── status          Alias para git status
-├── commit          Gera commit com IA a partir do diff local
-├── push            commit + push para origin
-├── pr              commit (se necessário) + push + PR detalhado via gh
-└── config          Wizard de configuração (ou subcomandos init/show)
-    ├── init        Wizard interativo (alias de gitia config)
-    └── show        Exibe config ativa (key mascarada)
+gitia                 Overview do repositório (default)
+├── update            git pull + reinstala o binário
+├── status            Alias para git status
+├── commit            Gera commit com IA a partir do diff local
+├── push              commit + push para origin
+├── pr                commit (se necessário) + push + PR detalhado via gh
+└── config            Wizard de configuração (ou subcomandos init/show)
+    ├── init          Wizard interativo (alias de gitia config)
+    └── show          Exibe config ativa (key mascarada)
 ```
 
 > Instalação (uma vez, a partir do clone): `go run ./cmd/gitia install`
@@ -290,6 +307,7 @@ gitia
 
 | Comando | O que faz | Chama IA? | Executa git? | Executa gh? |
 |---------|-----------|-----------|--------------|-------------|
+| `gitia` | Overview do repositório | não | leitura | não |
 | `gitia commit` | Commit com mensagem gerada | 1× (commit) | `add`, `commit` | não |
 | `gitia push` | Commit + push | 1× (commit) | `add`, `commit`, `push` | não |
 | `gitia pr` | Commit + push + PR | 1–2× (commit + PR) | `add`, `commit`, `push` | `pr create` |

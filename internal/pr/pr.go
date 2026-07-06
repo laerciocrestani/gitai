@@ -2,6 +2,7 @@ package pr
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,14 @@ import (
 
 	"github.com/laerciocrestani/gitia/internal/ai"
 )
+
+type PRView struct {
+	URL     string
+	Title   string
+	State   string
+	Number  int
+	IsDraft bool
+}
 
 type Client struct {
 	dir string
@@ -35,16 +44,51 @@ func (c *Client) run(args ...string) (string, error) {
 }
 
 func (c *Client) Exists() (bool, string, error) {
-	out, err := c.run("pr", "view", "--json", "url", "-q", ".url")
+	view, err := c.ViewCurrent()
 	if err != nil {
-		if strings.Contains(err.Error(), "no pull requests") ||
-			strings.Contains(err.Error(), "could not find") ||
-			strings.Contains(err.Error(), "not found") {
-			return false, "", nil
-		}
 		return false, "", err
 	}
-	return true, out, nil
+	if view == nil {
+		return false, "", nil
+	}
+	return true, view.URL, nil
+}
+
+func (c *Client) ViewCurrent() (*PRView, error) {
+	out, err := c.run("pr", "view", "--json", "title,url,state,number,isDraft")
+	if err != nil {
+		if isPRNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var raw struct {
+		Title   string `json:"title"`
+		URL     string `json:"url"`
+		State   string `json:"state"`
+		Number  int    `json:"number"`
+		IsDraft bool   `json:"isDraft"`
+	}
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		return nil, err
+	}
+
+	return &PRView{
+		URL:     raw.URL,
+		Title:   raw.Title,
+		State:   raw.State,
+		Number:  raw.Number,
+		IsDraft: raw.IsDraft,
+	}, nil
+}
+
+func isPRNotFound(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "no pull requests") ||
+		strings.Contains(msg, "could not find") ||
+		strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "no default remote")
 }
 
 func (c *Client) Create(suggestion *ai.PRSuggestion, base string, draft bool) (string, error) {

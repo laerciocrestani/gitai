@@ -5,23 +5,30 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/laerciocrestani/gitia/internal/ui"
 )
 
 func InitInteractive() error {
-	cfg := Default()
+	sess := ui.New("config", false)
+	sess.Header()
 
+	cfg := Default()
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Println("Configuração do gitia")
-	fmt.Println()
+	if err := sess.Step("Starting configuration wizard", func() error {
+		return nil
+	}); err != nil {
+		return err
+	}
 
-	provider, err := promptChoice(reader, "Provider", []string{"openrouter", "openai", "gemini"}, string(cfg.Provider))
+	provider, err := promptChoice(sess, reader, "Provider", []string{"openrouter", "openai", "gemini"}, string(cfg.Provider))
 	if err != nil {
 		return err
 	}
 	cfg.Provider = Provider(provider)
 
-	fmt.Print("API Key: ")
+	sess.Prompt("API Key: ")
 	apiKey, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -29,7 +36,7 @@ func InitInteractive() error {
 	cfg.APIKey = strings.TrimSpace(apiKey)
 
 	defaultModel := defaultModelFor(cfg.Provider)
-	fmt.Printf("Model [%s]: ", defaultModel)
+	sess.Prompt(fmt.Sprintf("Model [%s]: ", defaultModel))
 	model, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -40,7 +47,7 @@ func InitInteractive() error {
 	}
 	cfg.Model = model
 
-	fmt.Printf("Idioma das mensagens [%s]: ", cfg.Language)
+	sess.Prompt(fmt.Sprintf("Idioma das mensagens [%s]: ", cfg.Language))
 	lang, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -50,7 +57,7 @@ func InitInteractive() error {
 		cfg.Language = lang
 	}
 
-	fmt.Printf("Branch base [%s]: ", cfg.BaseBranch)
+	sess.Prompt(fmt.Sprintf("Branch base [%s]: ", cfg.BaseBranch))
 	base, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -60,7 +67,7 @@ func InitInteractive() error {
 		cfg.BaseBranch = base
 	}
 
-	fmt.Print("Co-author trailer (opcional, ex: Co-authored-by: Name <email>): ")
+	sess.Prompt("Co-author trailer (opcional): ")
 	coAuthor, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -72,11 +79,14 @@ func InitInteractive() error {
 		return err
 	}
 
-	if err := Save(path, cfg); err != nil {
+	if err := sess.Step("Saving configuration", func() error {
+		return Save(path, cfg)
+	}); err != nil {
 		return err
 	}
 
-	fmt.Printf("\nConfig salva em %s\n", path)
+	sess.Detail(path)
+	sess.Success("Configuration saved ✨")
 	return nil
 }
 
@@ -91,8 +101,8 @@ func defaultModelFor(p Provider) string {
 	}
 }
 
-func promptChoice(reader *bufio.Reader, label string, options []string, defaultVal string) (string, error) {
-	fmt.Printf("%s (%s) [%s]: ", label, strings.Join(options, ", "), defaultVal)
+func promptChoice(sess *ui.Session, reader *bufio.Reader, label string, options []string, defaultVal string) (string, error) {
+	sess.Prompt(fmt.Sprintf("%s (%s) [%s]: ", label, strings.Join(options, ", "), defaultVal))
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err

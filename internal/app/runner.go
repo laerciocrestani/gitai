@@ -11,6 +11,7 @@ import (
 	"github.com/laerciocrestani/gitia/internal/formatter"
 	gitpkg "github.com/laerciocrestani/gitia/internal/git"
 	prpkg "github.com/laerciocrestani/gitia/internal/pr"
+	"github.com/laerciocrestani/gitia/internal/ui"
 )
 
 type Options struct {
@@ -19,6 +20,7 @@ type Options struct {
 	Draft   bool
 	Base    string
 	Verbose bool
+	UI      *ui.Session
 }
 
 type Result struct {
@@ -29,75 +31,37 @@ type Result struct {
 	PRPreview    string
 }
 
+func (o Options) session(command string) *ui.Session {
+	if o.UI != nil {
+		return o.UI
+	}
+	return ui.New(command, o.DryRun)
+}
+
 func RunCommit(ctx context.Context, opts Options) (*Result, error) {
-	cfg, err := config.Load()
+	sess := opts.session("commit")
+	sess.Header()
+
+	result, provider, err := commitFlow(ctx, opts, sess)
 	if err != nil {
 		return nil, err
 	}
 
-	repo, err := gitpkg.New()
-	if err != nil {
-		return nil, err
-	}
-	if err := repo.IsRepo(); err != nil {
-		return nil, fmt.Errorf("diretório atual não é um repositório git")
+	if provider != nil {
+		provider.UsageStats().PrintWith(sess)
 	}
 
-	if !opts.NoAdd {
-		if opts.DryRun {
-			fmt.Println("[dry-run] git add .")
-		} else {
-			if err := repo.AddAll(); err != nil {
-				return nil, err
-			}
-		}
+	if result != nil && result.Message != "" && !opts.DryRun {
+		sess.Detail(formatter.TitleLine(result.Message))
 	}
-
-	diff, err := repo.DiffForCommit()
-	if err != nil {
-		return nil, err
-	}
-	if diff == "" {
-		return nil, fmt.Errorf("nenhuma alteração para commitar")
-	}
-
-	provider, err := ai.New(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	suggestion, err := provider.SuggestCommit(ctx, diff, cfg.Language)
-	if err != nil {
-		return nil, err
-	}
-
-	message := formatter.FormatCommit(suggestion, cfg.CoAuthor)
-
-	result := &Result{
-		Suggestion: suggestion,
-		Message:    message,
-	}
-
-	if opts.Verbose {
-		printCommitVerbose(suggestion, message)
-	}
-
-	if opts.DryRun {
-		fmt.Println("[dry-run] git commit -m", quoteMessage(message))
-		provider.UsageStats().Print()
-		return result, nil
-	}
-
-	if err := repo.Commit(message); err != nil {
-		return nil, err
-	}
-
-	fmt.Println("Commit criado:", formatter.TitleLine(message))
-	provider.UsageStats().Print()
+	sess.Success("Ready to ship 🚀")
 	return result, nil
 }
 
 func RunPush(ctx context.Context, opts Options) (*Result, error) {
+	sess := opts.session("push")
+	sess.Header()
+
 	repo, err := gitpkg.New()
 	if err != nil {
 		return nil, err
@@ -107,14 +71,19 @@ func RunPush(ctx context.Context, opts Options) (*Result, error) {
 	}
 
 	if !opts.NoAdd {
-		if opts.DryRun {
-			fmt.Println("[dry-run] git add .")
-		} else if err := repo.AddAll(); err != nil {
+		if err := sess.Step("Staging changes", func() error {
+			if opts.DryRun {
+				sess.Detail("git add .")
+				return nil
+			}
+			return repo.AddAll()
+		}); err != nil {
 			return nil, err
 		}
 	}
 
 	var result *Result
+	var provider ai.Provider
 
 	diff, err := repo.DiffForCommit()
 	if err != nil {
@@ -124,29 +93,37 @@ func RunPush(ctx context.Context, opts Options) (*Result, error) {
 	if diff != "" {
 		pushOpts := opts
 		pushOpts.NoAdd = true
-		result, err = RunCommit(ctx, pushOpts)
+		pushOpts.UI = sess
+		result, provider, err = commitFlow(ctx, pushOpts, sess)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		fmt.Println("Nenhuma alteração pendente; enviando commits existentes")
+		sess.Info("No pending changes — pushing existing commits")
 		result = &Result{}
 	}
 
-	if opts.DryRun {
-		fmt.Println("[dry-run] git push -u origin HEAD")
-		return result, nil
-	}
-
-	if err := repo.Push(); err != nil {
+	if err := sess.Step("Pushing to origin", func() error {
+		if opts.DryRun {
+			sess.Detail("git push -u origin HEAD")
+			return nil
+		}
+		return repo.Push()
+	}); err != nil {
 		return nil, err
 	}
 
-	fmt.Println("Push concluído")
+	if provider != nil {
+		provider.UsageStats().PrintWith(sess)
+	}
+	sess.Success("Ready to ship 🚀")
 	return result, nil
 }
 
 func RunPR(ctx context.Context, opts Options) (*Result, error) {
+	sess := opts.session("pr")
+	sess.Header()
+
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
@@ -165,8 +142,12 @@ func RunPR(ctx context.Context, opts Options) (*Result, error) {
 		return nil, fmt.Errorf("diretório atual não é um repositório git")
 	}
 
-	resolvedBase, err := repo.ResolveBase(base)
-	if err != nil {
+	var resolvedBase string
+	if err := sess.Step("Resolving base branch", func() error {
+		var err error
+		resolvedBase, err = repo.ResolveBase(base)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 
@@ -176,9 +157,13 @@ func RunPR(ctx context.Context, opts Options) (*Result, error) {
 	}
 
 	if !opts.NoAdd {
-		if opts.DryRun {
-			fmt.Println("[dry-run] git add .")
-		} else if err := repo.AddAll(); err != nil {
+		if err := sess.Step("Staging changes", func() error {
+			if opts.DryRun {
+				sess.Detail("git add .")
+				return nil
+			}
+			return repo.AddAll()
+		}); err != nil {
 			return nil, err
 		}
 	}
@@ -191,7 +176,7 @@ func RunPR(ctx context.Context, opts Options) (*Result, error) {
 	}
 
 	if hasStaged {
-		commitResult, err := commitStaged(ctx, cfg, repo, opts, provider)
+		commitResult, err := commitStaged(ctx, cfg, repo, opts, provider, sess)
 		if err != nil {
 			return nil, err
 		}
@@ -205,19 +190,25 @@ func RunPR(ctx context.Context, opts Options) (*Result, error) {
 		if same {
 			return nil, fmt.Errorf("nenhuma alteração em relação à %s", baseForGH(resolvedBase))
 		}
-		fmt.Println("Nenhuma alteração pendente; usando commits já existentes na branch")
+		sess.Info("Using existing commits on branch")
 	}
 
-	if opts.DryRun {
-		fmt.Println("[dry-run] git push -u origin HEAD")
-	} else if err := repo.Push(); err != nil {
+	if err := sess.Step("Pushing to origin", func() error {
+		if opts.DryRun {
+			sess.Detail("git push -u origin HEAD")
+			return nil
+		}
+		return repo.Push()
+	}); err != nil {
 		return nil, err
-	} else {
-		fmt.Println("Push concluído")
 	}
 
-	branch, err := repo.CurrentBranch()
-	if err != nil {
+	var branch string
+	if err := sess.Step("Reading branch diff", func() error {
+		var err error
+		branch, err = repo.CurrentBranch()
+		return err
+	}); err != nil {
 		return nil, err
 	}
 
@@ -234,8 +225,11 @@ func RunPR(ctx context.Context, opts Options) (*Result, error) {
 		return nil, err
 	}
 
-	prSuggestion, err := provider.SuggestPR(ctx, diff, branch, baseForGH(resolvedBase), cfg.Language, commitLog)
-	if err != nil {
+	var prSuggestion *ai.PRSuggestion
+	if err := sess.Step("Thinking", func() error {
+		prSuggestion, err = provider.SuggestPR(ctx, diff, branch, baseForGH(resolvedBase), cfg.Language, commitLog)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 
@@ -253,30 +247,115 @@ func RunPR(ctx context.Context, opts Options) (*Result, error) {
 	if opts.DryRun {
 		preview := prClient.PreviewCreate(prSuggestion, resolvedBase, opts.Draft)
 		result.PRPreview = preview
-		fmt.Println("[dry-run]", preview)
-		provider.UsageStats().Print()
+		sess.Detail(preview)
+		provider.UsageStats().PrintWith(sess)
+		sess.Success("Ready to ship 🚀")
 		return result, nil
 	}
 
-	url, err := prClient.Create(prSuggestion, resolvedBase, opts.Draft)
-	if err != nil {
+	var url string
+	if err := sess.Step("Creating Pull Request", func() error {
+		url, err = prClient.Create(prSuggestion, resolvedBase, opts.Draft)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 
 	result.PRURL = url
-	fmt.Println("PR criado:", url)
-	provider.UsageStats().Print()
+	sess.Detail(url)
+	provider.UsageStats().PrintWith(sess)
+	sess.Success("Ready to ship 🚀")
 	return result, nil
 }
 
-func commitStaged(ctx context.Context, cfg *config.Config, repo *gitpkg.Repo, opts Options, provider ai.Provider) (*Result, error) {
+func commitFlow(ctx context.Context, opts Options, sess *ui.Session) (*Result, ai.Provider, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	repo, err := gitpkg.New()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := repo.IsRepo(); err != nil {
+		return nil, nil, fmt.Errorf("diretório atual não é um repositório git")
+	}
+
+	if !opts.NoAdd {
+		if err := sess.Step("Staging changes", func() error {
+			if opts.DryRun {
+				sess.Detail("git add .")
+				return nil
+			}
+			return repo.AddAll()
+		}); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	var diff string
+	if err := sess.Step("Reading git diff", func() error {
+		var err error
+		diff, err = repo.DiffForCommit()
+		if err != nil {
+			return err
+		}
+		if diff == "" {
+			return fmt.Errorf("nenhuma alteração para commitar")
+		}
+		return nil
+	}); err != nil {
+		return nil, nil, err
+	}
+
+	provider, err := ai.New(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var suggestion *ai.CommitSuggestion
+	if err := sess.Step("Thinking", func() error {
+		suggestion, err = provider.SuggestCommit(ctx, diff, cfg.Language)
+		return err
+	}); err != nil {
+		return nil, nil, err
+	}
+
+	message := formatter.FormatCommit(suggestion, cfg.CoAuthor)
+	result := &Result{
+		Suggestion: suggestion,
+		Message:    message,
+	}
+
+	if opts.Verbose {
+		printCommitVerbose(suggestion, message)
+	}
+
+	if err := sess.Step("Writing Conventional Commit", func() error {
+		if opts.DryRun {
+			sess.Detail("git commit -m " + quoteMessage(message))
+			return nil
+		}
+		return repo.Commit(message)
+	}); err != nil {
+		return nil, nil, err
+	}
+
+	return result, provider, nil
+}
+
+func commitStaged(ctx context.Context, cfg *config.Config, repo *gitpkg.Repo, opts Options, provider ai.Provider, sess *ui.Session) (*Result, error) {
 	diff, err := repo.DiffStaged()
 	if err != nil {
 		return nil, err
 	}
 
-	suggestion, err := provider.SuggestCommit(ctx, diff, cfg.Language)
-	if err != nil {
+	var suggestion *ai.CommitSuggestion
+	if err := sess.Step("Thinking", func() error {
+		suggestion, err = provider.SuggestCommit(ctx, diff, cfg.Language)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 
@@ -290,16 +369,16 @@ func commitStaged(ctx context.Context, cfg *config.Config, repo *gitpkg.Repo, op
 		printCommitVerbose(suggestion, message)
 	}
 
-	if opts.DryRun {
-		fmt.Println("[dry-run] git commit -m", quoteMessage(message))
-		return result, nil
-	}
-
-	if err := repo.Commit(message); err != nil {
+	if err := sess.Step("Writing Conventional Commit", func() error {
+		if opts.DryRun {
+			sess.Detail("git commit -m " + quoteMessage(message))
+			return nil
+		}
+		return repo.Commit(message)
+	}); err != nil {
 		return nil, err
 	}
 
-	fmt.Println("Commit criado:", formatter.TitleLine(message))
 	return result, nil
 }
 
