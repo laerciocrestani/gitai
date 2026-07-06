@@ -51,7 +51,6 @@ func RunOverview() error {
 		})
 	}
 
-	fmt.Println()
 	printGitiaConfig(sess)
 	printRecentCommits(sess, overview)
 	printBranches(sess, overview)
@@ -159,7 +158,7 @@ func printStash(sess *ui.Session, o *gitpkg.Overview) {
 }
 
 func printGitiaConfig(sess *ui.Session) {
-	sess.Section("Gitia config")
+	sess.SectionFirst("Gitia config")
 	cfg, err := config.Load()
 	if err != nil {
 		sess.KV("Status", "not configured — run: gitia config")

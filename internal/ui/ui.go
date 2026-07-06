@@ -43,8 +43,9 @@ func colorsEnabled() bool {
 
 func (s *Session) Header() {
 	title := s.paint("Gitia", bold+cyan)
-	version := s.paint(Version(), dim)
-	fmt.Fprintf(s.out, "\n🤖 %s %s\n", title, version)
+	ver := s.paint(Version(), dim)
+	chip := s.paint("[", dim) + " " + ver + " " + s.paint("]", dim)
+	fmt.Fprintf(s.out, "🤖 %s   %s\n", title, chip)
 }
 
 func (s *Session) Divider() {
@@ -119,6 +120,11 @@ func (s *Session) UsageBlock(lines []string) {
 
 func (s *Session) Section(title string) {
 	fmt.Fprintf(s.out, "\n%s\n", s.paint(title, bold+cyan))
+}
+
+// SectionFirst é a primeira seção após o header — sem linha em branco antes.
+func (s *Session) SectionFirst(title string) {
+	fmt.Fprintf(s.out, "%s\n", s.paint(title, bold+cyan))
 }
 
 // Footer adiciona uma linha em branco antes do prompt do shell.
