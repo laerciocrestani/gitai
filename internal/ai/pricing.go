@@ -60,6 +60,9 @@ func geminiDefaultPrices(model string) (float64, float64) {
 	case "gemini-3.1-flash-lite":
 		return 0.25, 1.50
 
+	case "gemini-3.5-flash":
+		return 0.30, 2.50
+
 	case "gemini-3-flash", "gemini-3-flash-preview":
 		return 0.50, 3.00
 

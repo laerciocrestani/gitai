@@ -70,6 +70,15 @@ func main() {
 	prCmd.Flags().BoolVar(&draft, "draft", false, "cria PR como draft")
 	prCmd.Flags().StringVar(&base, "base", "", "branch base (default: config base_branch)")
 
+	prViewCmd := &cobra.Command{
+		Use:   "view",
+		Short: "Abre o PR da branch atual no browser",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.RunPRView()
+		},
+	}
+	prCmd.AddCommand(prViewCmd)
+
 	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Alias para git status",

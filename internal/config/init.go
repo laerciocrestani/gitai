@@ -229,12 +229,12 @@ func defaultFallbackFor(p Provider, primary string) string {
 	switch p {
 	case ProviderGemini:
 		switch primary {
-		case "gemini-2.0-flash":
-			return "gemini-2.0-flash-lite"
-		case "gemini-2.0-flash-lite":
-			return "gemini-2.0-flash"
+		case "gemini-2.5-flash-lite":
+			return "gemini-2.5-flash"
+		case "gemini-2.5-flash":
+			return "gemini-3.1-flash-lite"
 		default:
-			return "gemini-2.0-flash"
+			return "gemini-3.1-flash-lite"
 		}
 	case ProviderOpenAI:
 		return "gpt-4o-mini"
@@ -250,7 +250,7 @@ func modelSuggestions(p Provider) []string {
 	case ProviderOpenAI:
 		return []string{"gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"}
 	case ProviderGemini:
-		return []string{"gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"}
+		return []string{"gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash"}
 	default:
 		return []string{"deepseek/deepseek-chat", "anthropic/claude-sonnet-4", "google/gemini-2.5-flash-lite"}
 	}
@@ -262,7 +262,7 @@ func fallbackSuggestions(p Provider, primary string) []string {
 	case ProviderOpenAI:
 		opts = []string{"gpt-4o-mini", "gpt-4.1-mini"}
 	case ProviderGemini:
-		opts = []string{"gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash"}
+		opts = []string{"gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash"}
 	default:
 		opts = []string{"deepseek/deepseek-chat", "google/gemini-2.0-flash"}
 	}

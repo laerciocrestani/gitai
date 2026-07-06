@@ -94,6 +94,7 @@ func (c *geminiClient) generate(ctx context.Context, prompt, label string) (stri
 }
 
 func (c *geminiClient) generateOnce(ctx context.Context, prompt, label, model string) (string, error) {
+	model = resolveGeminiModel(model)
 	url := fmt.Sprintf(
 		"https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
 		model,

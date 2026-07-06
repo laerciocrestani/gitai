@@ -87,6 +87,7 @@ func BuiltInGeminiDefaults() map[string]ModelPrice {
 		"gemini-2.0-flash":      {InputPer1M: 0.10, OutputPer1M: 0.40},
 		"gemini-2.5-pro":        {InputPer1M: 1.25, OutputPer1M: 10.00},
 		"gemini-3.1-flash-lite": {InputPer1M: 0.25, OutputPer1M: 1.50},
+		"gemini-3.5-flash":        {InputPer1M: 0.30, OutputPer1M: 2.50},
 		"gemini-3-flash":        {InputPer1M: 0.50, OutputPer1M: 3.00},
 		"gemini-3-flash-preview": {InputPer1M: 0.50, OutputPer1M: 3.00},
 		"gemini-3.1-pro":        {InputPer1M: 2.00, OutputPer1M: 12.00},

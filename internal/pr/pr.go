@@ -54,6 +54,20 @@ func (c *Client) Exists() (bool, string, error) {
 	return true, view.URL, nil
 }
 
+func (c *Client) OpenInBrowser() (*PRView, error) {
+	view, err := c.ViewCurrent()
+	if err != nil {
+		return nil, err
+	}
+	if view == nil {
+		return nil, fmt.Errorf("nenhum PR para a branch atual")
+	}
+	if _, err := c.run("pr", "view", "--web"); err != nil {
+		return nil, err
+	}
+	return view, nil
+}
+
 func (c *Client) ViewCurrent() (*PRView, error) {
 	out, err := c.run("pr", "view", "--json", "title,url,state,number,isDraft")
 	if err != nil {

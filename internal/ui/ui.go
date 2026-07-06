@@ -164,6 +164,14 @@ func (s *Session) CommandHint(cmd string) {
 	fmt.Fprintf(s.out, "  %s %s\n", s.paint("→", cyan), s.paint(cmd, bold+magenta))
 }
 
+func (s *Session) CommandHintWithNote(cmd, note string) {
+	fmt.Fprintf(s.out, "  %s %s %s\n",
+		s.paint("→", cyan),
+		s.paint(cmd, bold+magenta),
+		s.paint(note, dim),
+	)
+}
+
 func (s *Session) FileChange(path, status, stats string) {
 	tag := s.paint(status, fileStatusColor(status))
 	line := fmt.Sprintf("  %s %s", tag, path)

@@ -175,39 +175,18 @@ func printGitAiConfig(sess *ui.Session) {
 }
 
 func printSuggestions(sess *ui.Session, o *gitpkg.Overview, pr *prpkg.PRView) {
-	var tips []string
-
-	if _, err := config.Load(); err != nil {
-		tips = append(tips, "gitai config")
-	}
-	if o.IsDirty() {
-		tips = append(tips, "gitai commit")
-	}
-	if o.Ahead > 0 || (o.IsDirty() && o.Upstream != "") {
-		tips = append(tips, "gitai push")
-	}
-	if pr == nil && o.CommitsAheadOfBase > 0 && !o.IsDirty() {
-		tips = append(tips, "gitai pr")
-	}
-	if pr != nil {
-		tips = append(tips, "gh pr view --web")
-	}
-	if len(o.Stashes) > 0 {
-		tips = append(tips, "git stash pop")
-	}
-	if o.Behind > 0 {
-		tips = append(tips, "gitai sync")
-	}
-	if len(tips) == 0 && !o.IsDirty() {
-		tips = append(tips, "working tree clean")
-	}
+	_, err := config.Load()
+	steps := buildNextSteps(o, pr, err == nil)
 
 	sess.Section("Next steps")
-	for _, tip := range tips {
-		if strings.Contains(tip, " ") && !strings.HasPrefix(tip, "gitai") && !strings.HasPrefix(tip, "git ") && !strings.HasPrefix(tip, "gh ") {
-			sess.Bullet(tip)
-		} else {
-			sess.CommandHint(tip)
+	for _, step := range steps {
+		switch {
+		case step.plain:
+			sess.Bullet(step.command)
+		case step.note != "":
+			sess.CommandHintWithNote(step.command, step.note)
+		default:
+			sess.CommandHint(step.command)
 		}
 	}
 
