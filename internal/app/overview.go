@@ -167,10 +167,9 @@ func printGitAiConfig(sess *ui.Session) {
 	parts := []string{
 		fmt.Sprintf("Provider: %s", cfg.Provider),
 		fmt.Sprintf("Model: %s", cfg.Model),
-		fmt.Sprintf("API key: %s", config.MaskAPIKey(cfg.APIKey)),
 	}
-	if cfg.ClearScreen {
-		parts = append(parts, "Terminal: limpa antes de cada comando")
+	if fb := strings.TrimSpace(cfg.FallbackModel); fb != "" {
+		parts = append(parts, fmt.Sprintf("Fallback: %s", fb))
 	}
 	sess.Detail(strings.Join(parts, " · "))
 }

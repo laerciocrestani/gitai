@@ -39,6 +39,9 @@ func main() {
 	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "simula sem executar git/gh")
 	root.PersistentFlags().BoolVar(&verbose, "verbose", false, "exibe detalhes da sugestão da IA")
 	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if isConfigCommand(cmd) {
+			return
+		}
 		if config.ClearScreenEnabled() {
 			ui.ClearScreen()
 		}
@@ -271,4 +274,13 @@ func runReport(cmd *cobra.Command, args []string) error {
 		Month: reportMonth,
 		All:   reportAll,
 	})
+}
+
+func isConfigCommand(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Name() == "config" {
+			return true
+		}
+	}
+	return false
 }

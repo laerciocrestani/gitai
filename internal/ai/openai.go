@@ -85,14 +85,16 @@ func (c *openAIClient) SuggestPR(ctx context.Context, diff, branch, base, lang, 
 }
 
 func (c *openAIClient) chat(ctx context.Context, prompt, label string) (string, error) {
-	return callWithRetry(ctx, c.providerName(), func() (string, error) {
-		return c.chatOnce(ctx, prompt, label)
+	return withModelFallback(ctx, c.cfg, c.cfg.Model, func(model string) (string, error) {
+		return callWithRetry(ctx, c.providerName(), func() (string, error) {
+			return c.chatOnce(ctx, prompt, label, model)
+		})
 	})
 }
 
-func (c *openAIClient) chatOnce(ctx context.Context, prompt, label string) (string, error) {
+func (c *openAIClient) chatOnce(ctx context.Context, prompt, label, model string) (string, error) {
 	reqBody := chatRequest{
-		Model: c.cfg.Model,
+		Model: model,
 		Messages: []chatMessage{
 			{Role: "user", Content: prompt},
 		},
@@ -159,6 +161,7 @@ func (c *openAIClient) chatOnce(ctx context.Context, prompt, label string) (stri
 			chatResp.Usage.TotalTokens,
 			apiCost,
 			c.cfg,
+			model,
 		))
 	}
 

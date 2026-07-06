@@ -234,13 +234,15 @@ func RunPR(ctx context.Context, opts Options) (*Result, error) {
 	}
 
 	var prSuggestion *ai.PRSuggestion
-	prEstimate := ai.EstimateCost(cfg, diff, "pr")
-	sess.Detail("Estimativa: " + prEstimate.Format(cfg.Provider))
+	sess.Detail(ai.DescribePreparedInput(cfg, diff, "pr"))
 	if err := sess.Step("Thinking", func() error {
 		prSuggestion, err = provider.SuggestPR(ctx, diff, branch, baseForGH(resolvedBase), cfg.Language, commitLog)
 		return err
 	}); err != nil {
 		return nil, err
+	}
+	if line := ai.FormatLatestUsage(provider.UsageStats()); line != "" {
+		sess.Detail(line)
 	}
 
 	result.PRSuggestion = prSuggestion
@@ -327,13 +329,15 @@ func commitFlow(ctx context.Context, opts Options, sess *ui.Session) (*Result, a
 	}
 
 	var suggestion *ai.CommitSuggestion
-	commitEstimate := ai.EstimateCost(cfg, diff, "commit")
-	sess.Detail("Estimativa: " + commitEstimate.Format(cfg.Provider))
+	sess.Detail(ai.DescribePreparedInput(cfg, diff, "commit"))
 	if err := sess.Step("Thinking", func() error {
 		suggestion, err = provider.SuggestCommit(ctx, diff, cfg.Language)
 		return err
 	}); err != nil {
 		return nil, nil, err
+	}
+	if line := ai.FormatLatestUsage(provider.UsageStats()); line != "" {
+		sess.Detail(line)
 	}
 
 	message := formatter.FormatCommit(suggestion, cfg.CoAuthor)
@@ -366,13 +370,15 @@ func commitStaged(ctx context.Context, cfg *config.Config, repo *gitpkg.Repo, op
 	}
 
 	var suggestion *ai.CommitSuggestion
-	commitEstimate := ai.EstimateCost(cfg, diff, "commit")
-	sess.Detail("Estimativa: " + commitEstimate.Format(cfg.Provider))
+	sess.Detail(ai.DescribePreparedInput(cfg, diff, "commit"))
 	if err := sess.Step("Thinking", func() error {
 		suggestion, err = provider.SuggestCommit(ctx, diff, cfg.Language)
 		return err
 	}); err != nil {
 		return nil, err
+	}
+	if line := ai.FormatLatestUsage(provider.UsageStats()); line != "" {
+		sess.Detail(line)
 	}
 
 	message := formatter.FormatCommit(suggestion, cfg.CoAuthor)

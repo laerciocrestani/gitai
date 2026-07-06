@@ -10,18 +10,22 @@ import (
 )
 
 const (
-	maxRetryAttempts = 3
-	retryDelay       = 3 * time.Second
+	defaultRetryAttempts = 3
+	defaultRetryDelay    = 3 * time.Second
 )
+
+var gatewayBackoff = []time.Duration{
+	1 * time.Second,
+	2 * time.Second,
+	4 * time.Second,
+	8 * time.Second,
+	16 * time.Second,
+}
 
 type APIError struct {
 	Provider   string
 	StatusCode int
 	Body       string
-}
-
-func (e *APIError) Error() string {
-	return fmt.Sprintf("%s retornou %d: %s", e.Provider, e.StatusCode, e.Body)
 }
 
 func (e *APIError) Retryable() bool {
@@ -35,28 +39,58 @@ func (e *APIError) Retryable() bool {
 }
 
 func callWithRetry(ctx context.Context, provider string, fn func() (string, error)) (string, error) {
-	var lastErr error
-
-	for attempt := 1; attempt <= maxRetryAttempts; attempt++ {
+	for attempt := 1; ; attempt++ {
 		result, err := fn()
 		if err == nil {
 			return result, nil
 		}
-		lastErr = err
 
-		if !isRetryableError(err) || attempt == maxRetryAttempts {
+		maxAttempts := maxAttemptsFor(err)
+		if !isRetryableError(err) || attempt >= maxAttempts {
 			return "", err
 		}
 
-		fmt.Fprintf(os.Stderr, "  %s indisponível, tentando novamente em %s (%d/%d)...\n",
-			provider, retryDelay.Round(time.Second), attempt, maxRetryAttempts)
+		delay := retryDelayFor(err, attempt)
+		hint := retryMessage(err, provider)
+		fmt.Fprintf(os.Stderr, "  %s — tentando novamente em %s (%d/%d)...\n",
+			hint, formatDelay(delay), attempt, maxAttempts)
 
-		if err := sleep(ctx, retryDelay); err != nil {
+		if err := sleep(ctx, delay); err != nil {
 			return "", err
 		}
 	}
+}
 
-	return "", lastErr
+func maxAttemptsFor(err error) int {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && isGatewayError(apiErr.StatusCode) {
+		return len(gatewayBackoff) + 1
+	}
+	return defaultRetryAttempts
+}
+
+func retryDelayFor(err error, attempt int) time.Duration {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && isGatewayError(apiErr.StatusCode) {
+		idx := attempt - 1
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(gatewayBackoff) {
+			return gatewayBackoff[len(gatewayBackoff)-1]
+		}
+		return gatewayBackoff[idx]
+	}
+	return defaultRetryDelay
+}
+
+func isGatewayError(code int) bool {
+	return code == http.StatusBadGateway || code == http.StatusGatewayTimeout
+}
+
+func formatDelay(d time.Duration) string {
+	secs := d.Round(time.Second) / time.Second
+	return fmt.Sprintf("%ds", secs)
 }
 
 func isRetryableError(err error) bool {
@@ -65,6 +99,14 @@ func isRetryableError(err error) bool {
 		return apiErr.Retryable()
 	}
 	return false
+}
+
+func retryMessage(err error, provider string) string {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.retryHint()
+	}
+	return provider + " indisponível"
 }
 
 func sleep(ctx context.Context, d time.Duration) error {
@@ -78,4 +120,3 @@ func sleep(ctx context.Context, d time.Duration) error {
 		return nil
 	}
 }
-

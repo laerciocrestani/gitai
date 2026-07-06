@@ -2,6 +2,7 @@ package ai
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/laerciocrestani/gitai/internal/config"
 	"github.com/laerciocrestani/gitai/internal/pricing"
@@ -15,17 +16,21 @@ type CostEstimate struct {
 }
 
 func ResolvePrices(cfg *config.Config) (inputPer1M, outputPer1M float64) {
+	return ResolvePricesForModel(cfg, cfg.Model)
+}
+
+func ResolvePricesForModel(cfg *config.Config, model string) (inputPer1M, outputPer1M float64) {
 	if cfg.InputPricePer1M > 0 || cfg.OutputPricePer1M > 0 {
 		return cfg.InputPricePer1M, cfg.OutputPricePer1M
 	}
 
 	if cfg.Provider == config.ProviderGemini {
 		if store, err := pricing.Load(); err == nil {
-			if in, out, ok := store.PricesForModel(cfg.Model); ok {
+			if in, out, ok := store.PricesForModel(model); ok {
 				return in, out
 			}
 		}
-		return geminiDefaultPrices(cfg.Model)
+		return geminiDefaultPrices(model)
 	}
 
 	switch cfg.Provider {
@@ -98,6 +103,31 @@ func (e CostEstimate) Format(provider config.Provider) string {
 	source := costSourceFor(provider)
 	return fmt.Sprintf("~%d tokens · %s (input ~%d + output ~%d)",
 		total, formatCost(e.CostUSD, source), e.InputTokens, e.OutputTokens)
+}
+
+// DescribePreparedInput resume o que será enviado ao modelo antes da chamada.
+func DescribePreparedInput(cfg *config.Config, diff, task string) string {
+	diff = truncateDiff(diff, cfg.MaxDiffBytes)
+	tokens := estimateInputTokens(diff, task)
+	line := fmt.Sprintf("Input: ~%d tokens · modelo %s", tokens, cfg.Model)
+	if fb := strings.TrimSpace(cfg.FallbackModel); fb != "" && fb != cfg.Model {
+		line += fmt.Sprintf(" · fallback %s", fb)
+	}
+	return line
+}
+
+// FormatLatestUsage formata tokens e custo reais da última chamada.
+func FormatLatestUsage(summary UsageSummary) string {
+	if len(summary.Records) == 0 {
+		return ""
+	}
+	r := summary.Records[len(summary.Records)-1]
+	line := fmt.Sprintf("Uso: %d input + %d output = %d tokens",
+		r.PromptTokens, r.CompletionTokens, r.TotalTokens)
+	if r.CostUSD != nil {
+		line += " · " + formatCost(*r.CostUSD, r.CostSource)
+	}
+	return line
 }
 
 func costSourceFor(provider config.Provider) string {

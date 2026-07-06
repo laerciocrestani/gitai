@@ -26,6 +26,7 @@ type Config struct {
 	Provider         Provider `yaml:"provider"`
 	APIKey           string   `yaml:"api_key"`
 	Model            string   `yaml:"model"`
+	FallbackModel    string   `yaml:"fallback_model,omitempty"`
 	Language         string   `yaml:"language"`
 	BaseBranch       string   `yaml:"base_branch"`
 	CoAuthor         string   `yaml:"co_author"`

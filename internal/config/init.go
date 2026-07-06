@@ -12,7 +12,6 @@ import (
 
 func InitInteractive() error {
 	sess := ui.New("config", false)
-	sess.Header()
 
 	existing, savePath, err := LoadExisting()
 	if err != nil {
@@ -23,16 +22,15 @@ func InitInteractive() error {
 	reader := ui.StdinReader()
 	hadConfig := hasSavedConfig(existing)
 
-	sess.SectionFirst("Configuração")
+	intro := "Configure provedor, API, modelo principal e fallback"
 	if hadConfig {
-		sess.Info("Configuração atual detectada — Enter mantém cada valor entre colchetes")
-	} else {
-		sess.Info("Configure o provedor e o modelo de IA; a chave API vem em seguida")
+		intro = "Configuração atual detectada — Enter mantém cada valor entre colchetes"
 	}
+	wiz := ui.NewWizard(sess, "Configuração", intro)
 
 	prevProvider := cfg.Provider
 
-	provider, err := sess.Select(reader, ui.SelectConfig{
+	provider, err := wiz.Select(reader, ui.SelectConfig{
 		Label:      "Provedor",
 		Options:    []string{"openrouter", "openai", "gemini"},
 		Default:    string(cfg.Provider),
@@ -46,6 +44,12 @@ func InitInteractive() error {
 		return err
 	}
 	cfg.Provider = p
+
+	apiKey, err := promptAPIKey(wiz, reader, cfg.Provider, cfg.APIKey)
+	if err != nil {
+		return err
+	}
+	cfg.APIKey = apiKey
 
 	modelDefault := cfg.Model
 	if cfg.Provider != prevProvider || modelDefault == "" {
@@ -61,7 +65,7 @@ func InitInteractive() error {
 		modelOptions = append([]string{modelKeep}, modelOptions...)
 	}
 
-	model, err := sess.Select(reader, ui.SelectConfig{
+	model, err := wiz.Select(reader, ui.SelectConfig{
 		Label:      "Modelo",
 		Options:    modelOptions,
 		Default:    modelKeep,
@@ -75,19 +79,37 @@ func InitInteractive() error {
 	}
 	cfg.Model = model
 
-	apiKey, err := promptAPIKey(sess, reader, cfg.Provider, cfg.APIKey)
+	fallbackDefault := cfg.FallbackModel
+	if fallbackDefault == "" {
+		fallbackDefault = defaultFallbackFor(cfg.Provider, cfg.Model)
+	}
+	fallbackOptions := fallbackSuggestions(cfg.Provider, cfg.Model)
+	if fallbackDefault != "" && fallbackDefault != "(nenhum)" && !slices.Contains(fallbackOptions, fallbackDefault) {
+		fallbackOptions = append([]string{fallbackDefault}, fallbackOptions...)
+	}
+
+	fallbackChoice, err := wiz.Select(reader, ui.SelectConfig{
+		Label:      "Modelo fallback",
+		Options:    append([]string{"(nenhum)"}, fallbackOptions...),
+		Default:    fallbackDefault,
+		AllowOther: true,
+	})
 	if err != nil {
 		return err
 	}
-	cfg.APIKey = apiKey
+	if fallbackChoice == "(nenhum)" {
+		cfg.FallbackModel = ""
+	} else {
+		cfg.FallbackModel = fallbackChoice
+	}
 
-	sess.Section("Preferências")
+	wiz.AddSection("Preferências")
 
 	langDefault := cfg.Language
 	if langDefault == "" {
 		langDefault = "pt-BR"
 	}
-	lang, err := sess.Select(reader, ui.SelectConfig{
+	lang, err := wiz.Select(reader, ui.SelectConfig{
 		Label:      "Idioma das mensagens",
 		Options:    []string{"pt-BR", "en-US", "pt", "en"},
 		Default:    langDefault,
@@ -102,7 +124,7 @@ func InitInteractive() error {
 	if baseDefault == "" {
 		baseDefault = "main"
 	}
-	base, err := sess.Select(reader, ui.SelectConfig{
+	base, err := wiz.Select(reader, ui.SelectConfig{
 		Label:      "Branch base",
 		Options:    []string{"main", "master", "develop"},
 		Default:    baseDefault,
@@ -119,7 +141,7 @@ func InitInteractive() error {
 		coAuthorOptions = append(coAuthorOptions, cfg.CoAuthor)
 		coAuthorDefault = cfg.CoAuthor
 	}
-	coAuthorChoice, err := sess.Select(reader, ui.SelectConfig{
+	coAuthorChoice, err := wiz.Select(reader, ui.SelectConfig{
 		Label:      "Co-author trailer (opcional)",
 		Options:    coAuthorOptions,
 		Default:    coAuthorDefault,
@@ -138,7 +160,7 @@ func InitInteractive() error {
 	if cfg.ClearScreen {
 		clearDefault = "Sim"
 	}
-	clearChoice, err := sess.Select(reader, ui.SelectConfig{
+	clearChoice, err := wiz.Select(reader, ui.SelectConfig{
 		Label:      "Limpar terminal antes de cada comando",
 		Options:    []string{"Sim", "Não"},
 		Default:    clearDefault,
@@ -153,13 +175,12 @@ func InitInteractive() error {
 		return fmt.Errorf("chave API obrigatória — defina no wizard ou na variável %s", EnvAPIKey)
 	}
 
-	if err := sess.Step("Saving configuration", func() error {
-		return Save(savePath, cfg)
-	}); err != nil {
+	if err := Save(savePath, cfg); err != nil {
 		return err
 	}
 
-	sess.Detail(savePath)
+	wiz.Record("Salvo em", savePath)
+	wiz.Finish()
 	sess.Success("Configuration saved ✨")
 	return nil
 }
@@ -190,7 +211,7 @@ func hasSavedConfig(cfg *Config) bool {
 		return false
 	}
 	_, err = os.Stat(localPath)
-	return err == nil
+	return err != nil
 }
 
 func defaultModelFor(p Provider) string {
@@ -201,6 +222,26 @@ func defaultModelFor(p Provider) string {
 		return "gemini-2.5-flash-lite"
 	default:
 		return "deepseek/deepseek-chat"
+	}
+}
+
+func defaultFallbackFor(p Provider, primary string) string {
+	switch p {
+	case ProviderGemini:
+		switch primary {
+		case "gemini-2.0-flash":
+			return "gemini-2.0-flash-lite"
+		case "gemini-2.0-flash-lite":
+			return "gemini-2.0-flash"
+		default:
+			return "gemini-2.0-flash"
+		}
+	case ProviderOpenAI:
+		return "gpt-4o-mini"
+	case ProviderOpenRouter:
+		return "deepseek/deepseek-chat"
+	default:
+		return ""
 	}
 }
 
@@ -215,6 +256,25 @@ func modelSuggestions(p Provider) []string {
 	}
 }
 
+func fallbackSuggestions(p Provider, primary string) []string {
+	var opts []string
+	switch p {
+	case ProviderOpenAI:
+		opts = []string{"gpt-4o-mini", "gpt-4.1-mini"}
+	case ProviderGemini:
+		opts = []string{"gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash"}
+	default:
+		opts = []string{"deepseek/deepseek-chat", "google/gemini-2.0-flash"}
+	}
+	out := make([]string, 0, len(opts))
+	for _, o := range opts {
+		if o != primary {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
 func apiKeyHint(p Provider) string {
 	switch p {
 	case ProviderOpenAI:
@@ -226,12 +286,12 @@ func apiKeyHint(p Provider) string {
 	}
 }
 
-func promptAPIKey(sess *ui.Session, reader *bufio.Reader, provider Provider, current string) (string, error) {
+func promptAPIKey(wiz *ui.Wizard, reader *bufio.Reader, provider Provider, current string) (string, error) {
 	current = strings.TrimSpace(current)
 
 	if current != "" {
 		keepLabel := fmt.Sprintf("Manter atual (%s)", MaskAPIKey(current))
-		choice, err := sess.Select(reader, ui.SelectConfig{
+		choice, err := wiz.Select(reader, ui.SelectConfig{
 			Label:      "Chave API",
 			Options:    []string{keepLabel, "Digitar nova chave"},
 			Default:    keepLabel,
@@ -246,19 +306,23 @@ func promptAPIKey(sess *ui.Session, reader *bufio.Reader, provider Provider, cur
 		if choice != "Digitar nova chave" {
 			return choice, nil
 		}
+		wiz.UndoLast()
 	}
 
-	sess.Input("\n  • Chave em " + apiKeyHint(provider) + "\nChave API: ")
-	input, err := reader.ReadString('\n')
+	key, err := wiz.Ask(reader, "Chave API", "Chave em "+apiKeyHint(provider))
 	if err != nil {
 		return "", err
 	}
-	input = strings.TrimSpace(input)
-	if input == "" && current != "" {
+	if key == "" && current != "" {
 		return current, nil
 	}
-	if input == "" {
+	if key == "" {
 		return "", fmt.Errorf("chave API obrigatória")
 	}
-	return input, nil
+	display := MaskAPIKey(key)
+	if display == "****" {
+		display = "informada"
+	}
+	wiz.Record("Chave API", display)
+	return key, nil
 }

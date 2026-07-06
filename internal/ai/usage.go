@@ -95,7 +95,7 @@ func formatCost(cost float64, source string) string {
 	}
 }
 
-func buildUsageRecord(label string, prompt, completion, total int, apiCost *float64, cfg *config.Config) UsageRecord {
+func buildUsageRecord(label string, prompt, completion, total int, apiCost *float64, cfg *config.Config, model string) UsageRecord {
 	if total == 0 {
 		total = prompt + completion
 	}
@@ -113,7 +113,7 @@ func buildUsageRecord(label string, prompt, completion, total int, apiCost *floa
 		return record
 	}
 
-	inPrice, outPrice := ResolvePrices(cfg)
+	inPrice, outPrice := ResolvePricesForModel(cfg, model)
 	if inPrice > 0 || outPrice > 0 {
 		cost := float64(prompt)*inPrice/1_000_000 +
 			float64(completion)*outPrice/1_000_000

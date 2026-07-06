@@ -86,15 +86,17 @@ func (c *geminiClient) SuggestPR(ctx context.Context, diff, branch, base, lang, 
 }
 
 func (c *geminiClient) generate(ctx context.Context, prompt, label string) (string, error) {
-	return callWithRetry(ctx, "Gemini", func() (string, error) {
-		return c.generateOnce(ctx, prompt, label)
+	return withModelFallback(ctx, c.cfg, c.cfg.Model, func(model string) (string, error) {
+		return callWithRetry(ctx, "Gemini", func() (string, error) {
+			return c.generateOnce(ctx, prompt, label, model)
+		})
 	})
 }
 
-func (c *geminiClient) generateOnce(ctx context.Context, prompt, label string) (string, error) {
+func (c *geminiClient) generateOnce(ctx context.Context, prompt, label, model string) (string, error) {
 	url := fmt.Sprintf(
 		"https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
-		c.cfg.Model,
+		model,
 		c.cfg.APIKey,
 	)
 
@@ -156,6 +158,7 @@ func (c *geminiClient) generateOnce(ctx context.Context, prompt, label string) (
 			meta.TotalTokenCount,
 			nil,
 			c.cfg,
+			model,
 		))
 	}
 
