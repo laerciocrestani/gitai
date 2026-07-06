@@ -86,6 +86,8 @@ func formatCost(cost float64, source string) string {
 	switch source {
 	case "openrouter":
 		return fmt.Sprintf("$%.6f USD (OpenRouter)", cost)
+	case "gemini":
+		return fmt.Sprintf("$%.6f USD (Gemini)", cost)
 	case "estimated":
 		return fmt.Sprintf("$%.6f USD (estimativa)", cost)
 	default:
@@ -111,11 +113,12 @@ func buildUsageRecord(label string, prompt, completion, total int, apiCost *floa
 		return record
 	}
 
-	if cfg.InputPricePer1M > 0 || cfg.OutputPricePer1M > 0 {
-		cost := float64(prompt)*cfg.InputPricePer1M/1_000_000 +
-			float64(completion)*cfg.OutputPricePer1M/1_000_000
+	inPrice, outPrice := ResolvePrices(cfg)
+	if inPrice > 0 || outPrice > 0 {
+		cost := float64(prompt)*inPrice/1_000_000 +
+			float64(completion)*outPrice/1_000_000
 		record.CostUSD = &cost
-		record.CostSource = "estimated"
+		record.CostSource = costSourceFor(cfg.Provider)
 	}
 
 	return record

@@ -1,0 +1,136 @@
+package ai
+
+import (
+	"fmt"
+
+	"github.com/laerciocrestani/gitia/internal/config"
+	"github.com/laerciocrestani/gitia/internal/pricing"
+)
+
+type CostEstimate struct {
+	InputTokens  int
+	OutputTokens int
+	CostUSD      float64
+	HasCost      bool
+}
+
+func ResolvePrices(cfg *config.Config) (inputPer1M, outputPer1M float64) {
+	if cfg.InputPricePer1M > 0 || cfg.OutputPricePer1M > 0 {
+		return cfg.InputPricePer1M, cfg.OutputPricePer1M
+	}
+
+	if cfg.Provider == config.ProviderGemini {
+		if store, err := pricing.Load(); err == nil {
+			if in, out, ok := store.PricesForModel(cfg.Model); ok {
+				return in, out
+			}
+		}
+		return geminiDefaultPrices(cfg.Model)
+	}
+
+	switch cfg.Provider {
+	case config.ProviderOpenAI:
+		return 0.15, 0.60
+	case config.ProviderOpenRouter:
+		return 0.14, 0.28
+	default:
+		return 0, 0
+	}
+}
+
+func geminiDefaultPrices(model string) (float64, float64) {
+	switch model {
+	case "gemini-2.5-flash-lite", "gemini-2.0-flash-lite":
+		return 0.10, 0.40
+
+	case "gemini-2.5-flash":
+		return 0.30, 2.50
+
+	case "gemini-2.0-flash":
+		return 0.10, 0.40 // modelo legado
+
+	case "gemini-2.5-pro":
+		return 1.25, 10.00
+
+	case "gemini-3.1-flash-lite":
+		return 0.25, 1.50
+
+	case "gemini-3-flash", "gemini-3-flash-preview":
+		return 0.50, 3.00
+
+	case "gemini-3.1-pro", "gemini-3.1-pro-preview":
+		return 2.00, 12.00
+
+	default:
+		return 0.10, 0.40
+	}
+}
+
+func EstimateCost(cfg *config.Config, diff string, task string) CostEstimate {
+	inputTokens := estimateInputTokens(diff, task)
+	outputTokens := estimateOutputTokens(task)
+
+	inPrice, outPrice := ResolvePrices(cfg)
+	if inPrice == 0 && outPrice == 0 {
+		return CostEstimate{
+			InputTokens:  inputTokens,
+			OutputTokens: outputTokens,
+		}
+	}
+
+	cost := float64(inputTokens)*inPrice/1_000_000 +
+		float64(outputTokens)*outPrice/1_000_000
+
+	return CostEstimate{
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		CostUSD:      cost,
+		HasCost:      true,
+	}
+}
+
+func (e CostEstimate) Format(provider config.Provider) string {
+	total := e.InputTokens + e.OutputTokens
+	if !e.HasCost {
+		return fmt.Sprintf("~%d tokens estimados (input ~%d + output ~%d)",
+			total, e.InputTokens, e.OutputTokens)
+	}
+	source := costSourceFor(provider)
+	return fmt.Sprintf("~%d tokens · %s (input ~%d + output ~%d)",
+		total, formatCost(e.CostUSD, source), e.InputTokens, e.OutputTokens)
+}
+
+func costSourceFor(provider config.Provider) string {
+	switch provider {
+	case config.ProviderOpenRouter:
+		return "openrouter"
+	case config.ProviderGemini:
+		return "gemini"
+	default:
+		return "estimated"
+	}
+}
+
+func estimateInputTokens(diff, task string) int {
+	tokens := len(diff) / 4
+	tokens += promptOverhead(task)
+	return tokens
+}
+
+func estimateOutputTokens(task string) int {
+	switch task {
+	case "pr":
+		return 700
+	default:
+		return 250
+	}
+}
+
+func promptOverhead(task string) int {
+	switch task {
+	case "pr":
+		return 900
+	default:
+		return 500
+	}
+}

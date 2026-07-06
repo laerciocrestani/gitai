@@ -86,6 +86,12 @@ func (c *geminiClient) SuggestPR(ctx context.Context, diff, branch, base, lang, 
 }
 
 func (c *geminiClient) generate(ctx context.Context, prompt, label string) (string, error) {
+	return callWithRetry(ctx, "Gemini", func() (string, error) {
+		return c.generateOnce(ctx, prompt, label)
+	})
+}
+
+func (c *geminiClient) generateOnce(ctx context.Context, prompt, label string) (string, error) {
 	url := fmt.Sprintf(
 		"https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
 		c.cfg.Model,
@@ -121,7 +127,11 @@ func (c *geminiClient) generate(ctx context.Context, prompt, label string) (stri
 	}
 
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("Gemini retornou %d: %s", resp.StatusCode, string(respBody))
+		return "", &APIError{
+			Provider:   "Gemini",
+			StatusCode: resp.StatusCode,
+			Body:       string(respBody),
+		}
 	}
 
 	var geminiResp geminiResponse

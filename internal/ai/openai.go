@@ -85,6 +85,12 @@ func (c *openAIClient) SuggestPR(ctx context.Context, diff, branch, base, lang, 
 }
 
 func (c *openAIClient) chat(ctx context.Context, prompt, label string) (string, error) {
+	return callWithRetry(ctx, c.providerName(), func() (string, error) {
+		return c.chatOnce(ctx, prompt, label)
+	})
+}
+
+func (c *openAIClient) chatOnce(ctx context.Context, prompt, label string) (string, error) {
 	reqBody := chatRequest{
 		Model: c.cfg.Model,
 		Messages: []chatMessage{
@@ -121,7 +127,11 @@ func (c *openAIClient) chat(ctx context.Context, prompt, label string) (string, 
 	}
 
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("API retornou %d: %s", resp.StatusCode, string(respBody))
+		return "", &APIError{
+			Provider:   c.providerName(),
+			StatusCode: resp.StatusCode,
+			Body:       string(respBody),
+		}
 	}
 
 	var chatResp chatResponse
@@ -153,4 +163,15 @@ func (c *openAIClient) chat(ctx context.Context, prompt, label string) (string, 
 	}
 
 	return chatResp.Choices[0].Message.Content, nil
+}
+
+func (c *openAIClient) providerName() string {
+	switch c.cfg.Provider {
+	case config.ProviderOpenRouter:
+		return "OpenRouter"
+	case config.ProviderOpenAI:
+		return "OpenAI"
+	default:
+		return "API"
+	}
 }

@@ -124,6 +124,30 @@ func (r *Repo) IsRepo() error {
 	return err
 }
 
+func (r *Repo) ProjectName() string {
+	url, err := r.run("remote", "get-url", "origin")
+	if err == nil && url != "" {
+		return extractRepoName(url)
+	}
+	parts := strings.Split(r.dir, string(os.PathSeparator))
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return "unknown"
+}
+
+func extractRepoName(remote string) string {
+	remote = strings.TrimSpace(remote)
+	remote = strings.TrimSuffix(remote, ".git")
+	if i := strings.LastIndex(remote, "/"); i >= 0 {
+		return remote[i+1:]
+	}
+	if i := strings.LastIndex(remote, ":"); i >= 0 {
+		return remote[i+1:]
+	}
+	return remote
+}
+
 func (r *Repo) Status(args ...string) error {
 	cmd := exec.Command("git", append([]string{"status"}, args...)...)
 	cmd.Dir = r.dir

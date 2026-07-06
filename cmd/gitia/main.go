@@ -13,13 +13,18 @@ import (
 )
 
 var (
-	noAdd         bool
-	dryRun        bool
-	draft         bool
-	base          string
-	verbose       bool
+	noAdd               bool
+	dryRun              bool
+	draft               bool
+	base                string
+	verbose             bool
 	pruneBranches       bool
 	pruneRemoteBranches bool
+	reportHour          bool
+	reportHours         int
+	reportDays          int
+	reportMonth         bool
+	reportAll           bool
 )
 
 func main() {
@@ -109,6 +114,31 @@ func main() {
 	syncCmd.Flags().BoolVar(&pruneRemoteBranches, "prune-remote", false, "remove branches mergeadas só no GitHub")
 	syncCmd.Flags().StringVar(&base, "base", "", "branch base (default: config base_branch)")
 
+	versionCmd := &cobra.Command{
+		Use:   "version",
+		Short: "Exibe versão instalada",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sess := ui.New("version", false)
+			sess.Header()
+			info := ui.VersionInfo()
+			fmt.Println()
+			sess.MetaRow("Version", info.Version)
+			if info.Commit != "" {
+				sess.MetaRow("Commit", info.Commit)
+			}
+			if info.Tag != "" {
+				sess.MetaRow("Last tag", info.Tag)
+			}
+			if info.CommitsSince > 0 {
+				sess.MetaRow("Since tag", fmt.Sprintf("%d commit(s)", info.CommitsSince))
+			}
+			if info.Dirty {
+				sess.MetaRow("Tree", "dirty")
+			}
+			return nil
+		},
+	}
+
 	configCmd := &cobra.Command{
 		Use:   "config",
 		Short: "Configura provider, API key e preferências",
@@ -142,7 +172,51 @@ func main() {
 	}
 
 	configCmd.AddCommand(configInit, configShow)
-	root.AddCommand(installCmd, updateCmd, syncCmd, statusCmd, commitCmd, pushCmd, prCmd, configCmd)
+
+	pricingCmd := &cobra.Command{
+		Use:   "pricing",
+		Short: "Atualiza e consulta preços da API Gemini",
+		Long:  "Busca preços oficiais do Gemini na web e mantém estimativas de custo atualizadas.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.RunPricingUpdate()
+		},
+	}
+	pricingUpdate := &cobra.Command{
+		Use:   "update",
+		Short: "Busca preços oficiais e salva localmente",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.RunPricingUpdate()
+		},
+	}
+	pricingShow := &cobra.Command{
+		Use:   "show",
+		Short: "Exibe preços salvos",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.RunPricingShow()
+		},
+	}
+	pricingReport := &cobra.Command{
+		Use:   "report",
+		Short: "Relatório de gastos registrados",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.RunPricingReport()
+		},
+	}
+	pricingCmd.AddCommand(pricingUpdate, pricingShow, pricingReport)
+
+	reportCmd := &cobra.Command{
+		Use:   "report",
+		Short: "Relatório de uso e custos de IA",
+		Long:  "Lê o ledger de uso e exibe tokens e custos. Padrão: últimas 24 horas.",
+		RunE:  runReport,
+	}
+	reportCmd.Flags().BoolVar(&reportHour, "hour", false, "última hora")
+	reportCmd.Flags().IntVar(&reportHours, "hours", 0, "últimas N horas (padrão: 24 se nenhum período for informado)")
+	reportCmd.Flags().IntVar(&reportDays, "days", 0, "últimos N dias")
+	reportCmd.Flags().BoolVar(&reportMonth, "month", false, "mês atual (calendário)")
+	reportCmd.Flags().BoolVar(&reportAll, "all", false, "todo o histórico")
+
+	root.AddCommand(installCmd, updateCmd, syncCmd, versionCmd, statusCmd, commitCmd, pushCmd, prCmd, configCmd, pricingCmd, reportCmd)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -184,5 +258,15 @@ func runSync(cmd *cobra.Command, args []string) error {
 		PruneRemote: pruneRemoteBranches,
 		Base:        base,
 		DryRun:      dryRun,
+	})
+}
+
+func runReport(cmd *cobra.Command, args []string) error {
+	return app.RunReport(app.ReportOptions{
+		Hour:  reportHour,
+		Hours: reportHours,
+		Days:  reportDays,
+		Month: reportMonth,
+		All:   reportAll,
 	})
 }

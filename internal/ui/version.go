@@ -1,12 +1,14 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
-)
+	"sync"
 
-// CurrentVersion é a versão oficial do gitia — atualize aqui a cada release.
-const CurrentVersion = "v0.1.0"
+	"github.com/laerciocrestani/gitia/internal/version"
+)
 
 // Injetados via -ldflags no go install.
 var (
@@ -14,47 +16,38 @@ var (
 	buildCommit  string
 )
 
+var (
+	runtimeOnce sync.Once
+	runtimeInfo version.Info
+	runtimeOK   bool
+)
+
 func Version() string {
-	v := resolveVersion()
-	if commit := resolveCommit(); commit != "" {
-		return v + " · " + commit
-	}
-	return v
-}
-
-// VersionShort retorna só a versão sem sufixo de commit.
-func VersionShort() string {
-	return resolveVersion()
-}
-
-func resolveVersion() string {
-	if v := strings.TrimSpace(buildVersion); v != "" && !isPseudoVersion(v) {
-		return normalizeTag(v)
+	if v := strings.TrimSpace(buildVersion); v != "" {
+		if c := strings.TrimSpace(buildCommit); c != "" {
+			return v + " · " + shortHash(c)
+		}
+		return v
 	}
 
-	info, ok := debug.ReadBuildInfo()
+	info, ok := resolveRuntime()
 	if ok {
-		if v := info.Main.Version; v != "" && v != "(devel)" && !isPseudoVersion(v) {
-			return normalizeTag(v)
+		return info.Display()
+	}
+	return "v" + version.DefaultBase
+}
+
+func VersionInfo() version.Info {
+	if v := strings.TrimSpace(buildVersion); v != "" {
+		return version.Info{
+			Version: v,
+			Commit:  shortHash(buildCommit),
 		}
 	}
-
-	return CurrentVersion
-}
-
-func resolveCommit() string {
-	if c := strings.TrimSpace(buildCommit); c != "" {
-		return shortHash(c)
+	if info, ok := resolveRuntime(); ok {
+		return info
 	}
-
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return ""
-	}
-	if rev := vcsSetting(info, "vcs.revision"); rev != "" {
-		return shortHash(rev)
-	}
-	return ""
+	return version.Info{Version: "v" + version.DefaultBase}
 }
 
 func SetBuildVersion(v string) {
@@ -65,30 +58,45 @@ func SetBuildCommit(c string) {
 	buildCommit = c
 }
 
-func isPseudoVersion(v string) bool {
-	v = strings.TrimSpace(v)
-	if v == "" || v == "(devel)" {
-		return false
-	}
-	// v0.0.0-20260706025933-a2ee046f6eb2
-	if strings.Count(v, "-") >= 2 {
-		return true
-	}
-	return strings.Contains(v, "0.0.0-")
+func resolveRuntime() (version.Info, bool) {
+	runtimeOnce.Do(func() {
+		if root := findGitiaRoot(); root != "" {
+			if info, err := version.Compute(root); err == nil {
+				runtimeInfo = info
+				runtimeOK = true
+			}
+		}
+	})
+	return runtimeInfo, runtimeOK
 }
 
-func normalizeTag(v string) string {
-	v = strings.TrimSpace(v)
-	if v == "" || v == "(devel)" {
-		return CurrentVersion
+func findGitiaRoot() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, dep := range info.Deps {
+			if dep.Path == "github.com/laerciocrestani/gitia" && dep.Sum != "" {
+				// módulo em cache — tenta cwd
+				break
+			}
+		}
 	}
-	if strings.HasPrefix(v, "v") {
-		return v
+
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
 	}
-	if strings.Contains(v, ".") && !strings.Contains(v, "/") {
-		return "v" + v
+	for {
+		modPath := filepath.Join(dir, "go.mod")
+		data, err := os.ReadFile(modPath)
+		if err == nil && strings.Contains(string(data), "github.com/laerciocrestani/gitia") {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
-	return v
+	return ""
 }
 
 func shortHash(rev string) string {
@@ -97,13 +105,4 @@ func shortHash(rev string) string {
 		return rev[:7]
 	}
 	return rev
-}
-
-func vcsSetting(info *debug.BuildInfo, key string) string {
-	for _, s := range info.Settings {
-		if s.Key == key {
-			return s.Value
-		}
-	}
-	return ""
 }
