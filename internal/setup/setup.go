@@ -236,17 +236,15 @@ func ensurePath(sess *ui.Session) error {
 }
 
 func goInstall(root string) error {
-	version, _ := gitOutput(root, "describe", "--tags", "--always", "--dirty")
-	ldflags := ""
-	if version != "" {
-		ldflags = fmt.Sprintf("-X github.com/laerciocrestani/gitia/internal/ui.buildVersion=%s", version)
+	ldflags := fmt.Sprintf("-X github.com/laerciocrestani/gitia/internal/ui.buildVersion=%s", ui.CurrentVersion)
+
+	if !isReleaseBuild(root) {
+		if commit, err := gitShortHash(root); err == nil && commit != "" {
+			ldflags += fmt.Sprintf(" -X github.com/laerciocrestani/gitia/internal/ui.buildCommit=%s", commit)
+		}
 	}
 
-	args := []string{"install"}
-	if ldflags != "" {
-		args = append(args, "-ldflags", ldflags)
-	}
-	args = append(args, "./cmd/gitia")
+	args := []string{"install", "-ldflags", ldflags, "./cmd/gitia"}
 
 	cmd := exec.Command("go", args...)
 	cmd.Dir = root
@@ -334,4 +332,14 @@ func binaryName() string {
 		return "gitia.exe"
 	}
 	return "gitia"
+}
+
+func isReleaseBuild(root string) bool {
+	tag, err := gitOutput(root, "describe", "--tags", "--exact-match")
+	if err != nil {
+		return false
+	}
+	tag = strings.TrimPrefix(strings.TrimSpace(tag), "v")
+	current := strings.TrimPrefix(ui.CurrentVersion, "v")
+	return tag == current
 }
