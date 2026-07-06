@@ -75,7 +75,8 @@ func (r *Repo) MergedRemoteBranches(base string) ([]string, error) {
 		return nil, err
 	}
 
-	out, err := r.run("branch", "-r", "--merged", resolved, "--format=%(refname:short)")
+	// strip=2 → origin/<branch>; refname:short inclui "origin" (namespace do remote).
+	out, err := r.run("branch", "-r", "--merged", resolved, "--format=%(refname:strip=2)")
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +86,15 @@ func (r *Repo) MergedRemoteBranches(base string) ([]string, error) {
 		protected["origin/"+k] = true
 	}
 	protected["origin/HEAD"] = true
+	protected["origin"] = true
 
 	var branches []string
 	for _, name := range splitLines(out) {
 		name = strings.TrimSpace(name)
 		if name == "" || protected[name] || strings.Contains(name, "->") {
+			continue
+		}
+		if !strings.HasPrefix(name, "origin/") {
 			continue
 		}
 		short := strings.TrimPrefix(name, "origin/")
