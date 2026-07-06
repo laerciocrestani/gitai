@@ -203,9 +203,9 @@ O wizard pergunta, nesta ordem:
 
 | Campo | Opções / default | Descrição |
 |-------|------------------|-----------|
-| Provider | `openrouter`, `openai`, `gemini` | Serviço de IA |
-| API Key | — | Chave do provider (Enter mantém a atual) |
-| Model | depende do provider | Modelo de linguagem (Enter mantém) |
+| Provedor | `openrouter`, `openai`, `gemini` | Serviço de IA |
+| Modelo | depende do provedor | Modelo de linguagem (Enter mantém) |
+| Chave API | — | Chave do provedor (Enter mantém a atual) |
 | Idioma | default: `pt-BR` | Idioma das mensagens geradas |
 | Branch base | default: `main` | Branch usada como base do PR |
 | Co-author | opcional | Trailer adicionado ao commit |

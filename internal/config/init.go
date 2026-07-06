@@ -20,31 +20,22 @@ func InitInteractive() error {
 
 	cfg := *existing
 	reader := bufio.NewReader(os.Stdin)
-	hadConfig := strings.TrimSpace(cfg.APIKey) != ""
+	hadConfig := hasSavedConfig(existing)
 
-	if err := sess.Step("Starting configuration wizard", func() error {
-		return nil
-	}); err != nil {
-		return err
-	}
-
+	sess.SectionFirst("Configuração")
 	if hadConfig {
 		sess.Info("Configuração atual detectada — Enter mantém cada valor entre colchetes")
+	} else {
+		sess.Info("Configure o provedor e o modelo de IA; a chave API vem em seguida")
 	}
 
 	prevProvider := cfg.Provider
 
-	provider, err := promptChoice(sess, reader, "Provider", []string{"openrouter", "openai", "gemini"}, string(cfg.Provider))
+	provider, err := promptChoice(sess, reader, "Provedor", []string{"openrouter", "openai", "gemini"}, string(cfg.Provider))
 	if err != nil {
 		return err
 	}
 	cfg.Provider = Provider(provider)
-
-	apiKey, err := promptKeep(sess, reader, "API Key", MaskAPIKey(cfg.APIKey), cfg.APIKey)
-	if err != nil {
-		return err
-	}
-	cfg.APIKey = apiKey
 
 	modelDefault := cfg.Model
 	if cfg.Provider != prevProvider || modelDefault == "" {
@@ -54,7 +45,8 @@ func InitInteractive() error {
 	if cfg.Provider != prevProvider {
 		modelKeep = modelDefault
 	}
-	model, err := promptKeep(sess, reader, "Model", modelDefault, modelKeep)
+	sess.Info(fmt.Sprintf("Sugestões para %s: %s", provider, strings.Join(modelSuggestions(cfg.Provider), ", ")))
+	model, err := promptKeep(sess, reader, "Modelo", modelDefault, modelKeep)
 	if err != nil {
 		return err
 	}
@@ -62,6 +54,14 @@ func InitInteractive() error {
 		model = modelDefault
 	}
 	cfg.Model = model
+
+	apiKey, err := promptAPIKey(sess, reader, cfg.Provider, cfg.APIKey)
+	if err != nil {
+		return err
+	}
+	cfg.APIKey = apiKey
+
+	sess.Section("Preferências")
 
 	lang, err := promptKeep(sess, reader, "Idioma das mensagens", cfg.Language, cfg.Language)
 	if err != nil {
@@ -94,6 +94,10 @@ func InitInteractive() error {
 	}
 	cfg.ClearScreen = clear
 
+	if strings.TrimSpace(cfg.APIKey) == "" && strings.TrimSpace(os.Getenv(EnvAPIKey)) == "" {
+		return fmt.Errorf("chave API obrigatória — defina no wizard ou na variável %s", EnvAPIKey)
+	}
+
 	if err := sess.Step("Saving configuration", func() error {
 		return Save(savePath, cfg)
 	}); err != nil {
@@ -103,6 +107,25 @@ func InitInteractive() error {
 	sess.Detail(savePath)
 	sess.Success("Configuration saved ✨")
 	return nil
+}
+
+func hasSavedConfig(cfg *Config) bool {
+	if strings.TrimSpace(cfg.APIKey) != "" {
+		return true
+	}
+	path, err := ConfigPath()
+	if err != nil {
+		return false
+	}
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	localPath := LocalConfigPath()
+	if localPath == "" {
+		return false
+	}
+	_, err = os.Stat(localPath)
+	return err == nil
 }
 
 func defaultModelFor(p Provider) string {
@@ -116,8 +139,31 @@ func defaultModelFor(p Provider) string {
 	}
 }
 
+func modelSuggestions(p Provider) []string {
+	switch p {
+	case ProviderOpenAI:
+		return []string{"gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"}
+	case ProviderGemini:
+		return []string{"gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"}
+	default:
+		return []string{"deepseek/deepseek-chat", "anthropic/claude-sonnet-4", "google/gemini-2.5-flash-lite"}
+	}
+}
+
+func apiKeyHint(p Provider) string {
+	switch p {
+	case ProviderOpenAI:
+		return "https://platform.openai.com/api-keys"
+	case ProviderGemini:
+		return "https://aistudio.google.com/apikey"
+	default:
+		return "https://openrouter.ai/keys"
+	}
+}
+
 func promptChoice(sess *ui.Session, reader *bufio.Reader, label string, options []string, defaultVal string) (string, error) {
-	sess.Prompt(fmt.Sprintf("%s (%s) [%s]: ", label, strings.Join(options, ", "), defaultVal))
+	sess.Info("Opções: " + strings.Join(options, ", "))
+	sess.Prompt(fmt.Sprintf("%s [%s]: ", label, defaultVal))
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err
@@ -136,6 +182,25 @@ func promptChoice(sess *ui.Session, reader *bufio.Reader, label string, options 
 
 func promptKeep(sess *ui.Session, reader *bufio.Reader, label, displayDefault, current string) (string, error) {
 	sess.Prompt(fmt.Sprintf("%s [%s]: ", label, displayDefault))
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return current, nil
+	}
+	return input, nil
+}
+
+func promptAPIKey(sess *ui.Session, reader *bufio.Reader, provider Provider, current string) (string, error) {
+	sess.Info("Chave em " + apiKeyHint(provider))
+	current = strings.TrimSpace(current)
+	if current == "" {
+		sess.Prompt("Chave API: ")
+	} else {
+		sess.Prompt(fmt.Sprintf("Chave API [%s, Enter mantém]: ", MaskAPIKey(current)))
+	}
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err
