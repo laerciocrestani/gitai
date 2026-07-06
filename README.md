@@ -203,13 +203,15 @@ O wizard pergunta, nesta ordem:
 
 | Campo | Opções / default | Descrição |
 |-------|------------------|-----------|
-| Provedor | `openrouter`, `openai`, `gemini` | Serviço de IA |
-| Modelo | depende do provedor | Modelo de linguagem (Enter mantém) |
+| Provedor | `openrouter`, `openai`, `gemini` | Seletor com ↑↓ e Enter |
+| Modelo | sugestões + **Outro...** | Seletor; "Outro" permite digitar um modelo customizado |
 | Chave API | — | Chave do provedor (Enter mantém a atual) |
 | Idioma | default: `pt-BR` | Idioma das mensagens geradas |
 | Branch base | default: `main` | Branch usada como base do PR |
 | Co-author | opcional | Trailer adicionado ao commit |
 | Limpar terminal | `s` / `n` | Limpa o console antes de cada comando gitai |
+
+Provedor e modelo usam navegação por setas (`↑↓`) ou `j`/`k`. Fora de um TTY (CI, pipe), cai em lista numerada.
 
 Se já existir configuração, **Enter em qualquer campo mantém o valor atual** (ex.: `[gemini]`).
 

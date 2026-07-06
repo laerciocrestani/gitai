@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/laerciocrestani/gitai/internal/ui"
@@ -19,7 +20,7 @@ func InitInteractive() error {
 	}
 
 	cfg := *existing
-	reader := bufio.NewReader(os.Stdin)
+	reader := ui.StdinReader()
 	hadConfig := hasSavedConfig(existing)
 
 	sess.SectionFirst("Configuração")
@@ -31,7 +32,11 @@ func InitInteractive() error {
 
 	prevProvider := cfg.Provider
 
-	provider, err := promptChoice(sess, reader, "Provedor", []string{"openrouter", "openai", "gemini"}, string(cfg.Provider))
+	provider, err := sess.Select(reader, ui.SelectConfig{
+		Label:   "Provedor",
+		Options: []string{"openrouter", "openai", "gemini"},
+		Default: string(cfg.Provider),
+	})
 	if err != nil {
 		return err
 	}
@@ -45,8 +50,18 @@ func InitInteractive() error {
 	if cfg.Provider != prevProvider {
 		modelKeep = modelDefault
 	}
-	sess.Info(fmt.Sprintf("Sugestões para %s: %s", provider, strings.Join(modelSuggestions(cfg.Provider), ", ")))
-	model, err := promptKeep(sess, reader, "Modelo", modelDefault, modelKeep)
+
+	modelOptions := modelSuggestions(cfg.Provider)
+	if modelKeep != "" && !slices.Contains(modelOptions, modelKeep) {
+		modelOptions = append([]string{modelKeep}, modelOptions...)
+	}
+
+	model, err := sess.Select(reader, ui.SelectConfig{
+		Label:      "Modelo",
+		Options:    modelOptions,
+		Default:    modelKeep,
+		AllowOther: true,
+	})
 	if err != nil {
 		return err
 	}
@@ -159,25 +174,6 @@ func apiKeyHint(p Provider) string {
 	default:
 		return "https://openrouter.ai/keys"
 	}
-}
-
-func promptChoice(sess *ui.Session, reader *bufio.Reader, label string, options []string, defaultVal string) (string, error) {
-	sess.Info("Opções: " + strings.Join(options, ", "))
-	sess.Prompt(fmt.Sprintf("%s [%s]: ", label, defaultVal))
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return "", err
-	}
-	input = strings.TrimSpace(strings.ToLower(input))
-	if input == "" {
-		return defaultVal, nil
-	}
-	for _, opt := range options {
-		if input == opt {
-			return opt, nil
-		}
-	}
-	return "", fmt.Errorf("opção inválida: %q", input)
 }
 
 func promptKeep(sess *ui.Session, reader *bufio.Reader, label, displayDefault, current string) (string, error) {

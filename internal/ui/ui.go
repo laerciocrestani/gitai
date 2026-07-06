@@ -45,7 +45,7 @@ func (s *Session) Header() {
 	title := s.paint("GitAi", bold+cyan)
 	ver := s.paint(Version(), dim)
 	sep := s.paint("|", dim)
-	fmt.Fprintf(s.out, "🤖 %s %s %s\n", title, sep, ver)
+	fmt.Fprintf(s.out, "🤖 %s %s %s\n\n", title, sep, ver)
 }
 
 func (s *Session) Divider() {
