@@ -262,7 +262,7 @@ func (w *Wizard) redrawWithInput(label, hint, prompt string) {
 func (w *Wizard) buildFrame(active *selectState, inputLabel, inputHint string) string {
 	var b strings.Builder
 
-	writeBanner(&b, w.sess.dryRun, nil, w.sess.paint)
+	fmt.Fprint(&b, FormatDashboardHeader(nil, defaultHeaderWidth, w.sess.dryRun, w.sess.enabled))
 
 	b.WriteString(w.sess.paint(w.title, bold+cyan))
 	b.WriteString("\n")

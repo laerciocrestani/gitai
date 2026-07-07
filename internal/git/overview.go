@@ -30,6 +30,7 @@ type FileChange struct {
 type Overview struct {
 	Root               string
 	Branch             string
+	HeadHash           string
 	Detached           bool
 	RemoteURL          string
 	Upstream           string
@@ -61,6 +62,10 @@ func (r *Repo) Overview(baseBranch string) (*Overview, error) {
 	}
 	o.Branch = branch
 	o.Detached = branch == "HEAD"
+
+	if hash, err := r.run("rev-parse", "--short", "HEAD"); err == nil {
+		o.HeadHash = hash
+	}
 
 	if url, err := r.run("remote", "get-url", "origin"); err == nil {
 		o.RemoteURL = url

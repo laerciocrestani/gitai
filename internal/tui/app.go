@@ -3,10 +3,13 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/laerciocrestani/gitai/internal/app"
+	"github.com/laerciocrestani/gitai/internal/tui/components"
+	"github.com/laerciocrestani/gitai/internal/tui/views"
 	"github.com/laerciocrestani/gitai/internal/ui"
 )
 
@@ -22,12 +25,15 @@ type diffLoadedMsg struct {
 	err   error
 }
 
+type tickMsg struct{}
+
 type appModel struct {
 	screen         Screen
 	snapshot       *app.WorkspaceSnapshot
 	width          int
 	height         int
 	loading        bool
+	loadTick       int
 	err            error
 	status         string
 	diff           diffModel
@@ -49,7 +55,11 @@ func newApp(cfg refreshConfig) appModel {
 }
 
 func (m appModel) Init() tea.Cmd {
-	return tea.Batch(loadSnapshot, initRefreshCmds(m.refresh))
+	return tea.Batch(loadSnapshot, tickCmd(), initRefreshCmds(m.refresh))
+}
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
 func loadSnapshot() tea.Msg {
@@ -101,6 +111,14 @@ func loadDiffCmd(snap *app.WorkspaceSnapshot) tea.Cmd {
 
 func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tickMsg:
+		m.loadTick++
+		cmds := []tea.Cmd{tickCmd()}
+		if m.loading || (m.action != nil && (m.action.phase == PhaseRunning || m.action.phase == PhaseConfirming)) {
+			return m, tea.Batch(cmds...)
+		}
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -387,12 +405,12 @@ func (m appModel) View() string {
 		)))
 	}
 
-	var ctx *ui.BannerContext
+	var ctx *ui.HeaderContext
 	if m.snapshot != nil {
-		c := app.BuildBannerContext(m.snapshot)
+		c := app.BuildHeaderContext(m.snapshot)
 		ctx = &c
 	}
-	b.WriteString(ui.FormatBanner(false, ctx, !themePlain()))
+	b.WriteString(ui.FormatDashboardHeader(ctx, m.width, false, !themePlain()))
 
 	help := dashboardHelpLine()
 
@@ -409,7 +427,15 @@ func (m appModel) View() string {
 		help = helpHelpLine()
 	case ScreenAction:
 		if m.action != nil {
-			b.WriteString(m.action.View(m.width))
+			if m.action.phase == PhaseRunning || m.action.phase == PhaseConfirming {
+				status, _ := m.action.progress.Snapshot()
+				if status == "" {
+					status = "Generating…"
+				}
+				b.WriteString(components.RenderLoading(status, m.loadTick, m.width))
+			} else {
+				b.WriteString(m.action.View(m.width))
+			}
 			help = actionHelpLine()
 			if m.action.phase == PhaseConfirm {
 				help = actionConfirmHelp(m.action)
@@ -420,139 +446,38 @@ func (m appModel) View() string {
 		}
 	default:
 		if m.loading {
-			b.WriteString("\n")
-			b.WriteString(styleHint.Render("  " + m.status))
+			b.WriteString(views.RenderLoadingDashboard(m.status, m.loadTick, m.width))
 		} else if m.err != nil {
 			b.WriteString("\n")
-			b.WriteString(styleError.Render("  ✗ " + m.err.Error()))
+			b.WriteString(styleError.Render("  ✖ " + m.err.Error()))
 		} else {
-			b.WriteString(renderDashboard(m.snapshot))
+			b.WriteString(views.RenderDashboard(m.snapshot, views.DashboardOptions{
+				Width:  m.width,
+				Height: m.height,
+				Tick:   m.loadTick,
+			}))
 		}
 	}
 
-	b.WriteString(renderStatusBar(m.width, m.status, help))
-	return b.String()
-}
-
-func renderDashboard(snap *app.WorkspaceSnapshot) string {
-	if snap == nil || snap.Overview == nil {
-		return ""
+	if m.screen == ScreenDashboard && !m.loading && m.err == nil {
+		b.WriteString(views.RenderFooterBar(m.snapshot, m.width))
+	} else if help != "" {
+		b.WriteString(renderStatusBar(m.width, m.status, help))
+	} else if m.status != "" {
+		b.WriteString(renderStatusBar(m.width, m.status, ""))
 	}
-	o := snap.Overview
-	var b strings.Builder
-
-	if snap.OpenPR != nil {
-		pr := snap.OpenPR
-		state := strings.ToLower(pr.State)
-		if pr.IsDraft {
-			state = "draft"
-		}
-		b.WriteString(styleHint.Render(fmt.Sprintf("  PR #%d %s (%s)\n", pr.Number, truncate(pr.Title, 50), state)))
-	}
-
-	b.WriteString(styleSection.Render("Branches"))
-	b.WriteString("\n")
-	limit := min(len(o.Branches), 8)
-	for _, br := range o.Branches[:limit] {
-		marker := " "
-		name := br.Name
-		if br.Current {
-			marker = styleCurrent.Render("*")
-			name = styleCurrent.Render(name)
-		}
-		line := fmt.Sprintf("  %s %s", marker, name)
-		if br.Upstream != "" && (br.Ahead > 0 || br.Behind > 0) {
-			line += styleHint.Render(fmt.Sprintf(" (↑%d ↓%d)", br.Ahead, br.Behind))
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-
-	if len(o.FileChanges) > 0 {
-		b.WriteString(styleSection.Render("Changed files"))
-		b.WriteString("\n")
-		fileLimit := min(len(o.FileChanges), 12)
-		for _, f := range o.FileChanges[:fileLimit] {
-			tag := fileStatusStyle(f.Status).Render(statusTag(f.Status))
-			stats := ""
-			if f.Insertions > 0 || f.Deletions > 0 {
-				stats = styleHint.Render(fmt.Sprintf(" +%d -%d", f.Insertions, f.Deletions))
-			}
-			b.WriteString(fmt.Sprintf("  %s %s%s\n", tag, f.Path, stats))
-		}
-	}
-
-	if len(o.RecentCommits) > 0 {
-		b.WriteString(styleSection.Render("Recent commits"))
-		b.WriteString("\n")
-		for _, c := range o.RecentCommits {
-			b.WriteString(styleHint.Render("  " + c))
-			b.WriteString("\n")
-		}
-	}
-
-	b.WriteString(styleSection.Render("Next steps"))
-	b.WriteString("\n")
-	for _, step := range snap.NextSteps {
-		switch {
-		case step.Plain:
-			b.WriteString(styleHint.Render("  • " + step.Command))
-		case step.Muted && step.Note != "":
-			b.WriteString(fmt.Sprintf("  → %s %s\n", styleHint.Render(step.Command), styleHint.Render(step.Note)))
-		case step.Muted:
-			b.WriteString(fmt.Sprintf("  → %s\n", styleHint.Render(step.Command)))
-		case step.Note != "":
-			b.WriteString(fmt.Sprintf("  → %s %s\n", styleKey.Render(step.Command), styleHint.Render(step.Note)))
-		default:
-			b.WriteString(fmt.Sprintf("  → %s\n", styleKey.Render(step.Command)))
-		}
-	}
-
 	return b.String()
 }
 
 func renderStatusBar(width int, left, right string) string {
+	if right == "" {
+		right = left
+		left = ""
+	}
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right) - 2
 	if gap < 1 {
 		gap = 1
 	}
 	line := left + strings.Repeat(" ", gap) + right
 	return "\n" + styleStatusBar.Width(width).Render(line)
-}
-
-func statusTag(status string) string {
-	switch status {
-	case "untracked":
-		return "?"
-	case "deleted":
-		return "D"
-	case "new", "staged":
-		return "A"
-	case "modified", "staged+modified":
-		return "M"
-	default:
-		return "·"
-	}
-}
-
-func fileStatusStyle(status string) lipgloss.Style {
-	switch status {
-	case "untracked":
-		return styleUntracked
-	case "deleted":
-		return styleError
-	case "new", "staged":
-		return styleNew
-	case "modified", "staged+modified":
-		return styleModified
-	default:
-		return styleHint
-	}
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-1] + "…"
 }
