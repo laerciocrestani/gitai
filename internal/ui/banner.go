@@ -9,11 +9,9 @@ import (
 )
 
 var bannerGraph = []string{
-	"  ●────●",
-	"   ╱ ╲ ╱",
-	"  ●   ●─●",
-	"   ╲ ╱  │",
-	"    ●───●",
+	"●──●────────────●",
+	"    ╲           │",
+	"     ●──●──●────┘",
 }
 
 var bannerTitle = []string{
@@ -36,9 +34,18 @@ type BannerContext struct {
 }
 
 func writeBanner(out io.Writer, dryRun bool, ctx *BannerContext, paint func(string, string) string) {
-	lines := joinBannerArt(bannerTitle, bannerGraph, bannerArtGap)
-	for i, line := range lines {
-		fmt.Fprintln(out, paint(line, bannerLineStyle(i, len(lines))))
+	fmt.Fprintln(out)
+
+	titleWidth := maxLineWidth(bannerTitle)
+	gap := strings.Repeat(" ", bannerArtGap)
+	height := len(bannerTitle)
+
+	for i := 0; i < height; i++ {
+		style := bannerLineStyle(i, height)
+		left := bannerTitle[i]
+		right := bannerGraph[i]
+		pad := strings.Repeat(" ", titleWidth-lineWidth(left))
+		fmt.Fprintln(out, paint(left, style)+pad+gap+paint(right, style))
 	}
 
 	tagline := "AI-powered Git Workflow · " + Version()
@@ -60,29 +67,6 @@ func writeBanner(out io.Writer, dryRun bool, ctx *BannerContext, paint func(stri
 	}
 
 	fmt.Fprintln(out)
-}
-
-func joinBannerArt(left, right []string, gap int) []string {
-	height := len(left)
-	if len(right) > height {
-		height = len(right)
-	}
-	leftWidth := maxLineWidth(left)
-	gapStr := strings.Repeat(" ", gap)
-	var out []string
-	for i := 0; i < height; i++ {
-		l := ""
-		if i < len(left) {
-			l = left[i]
-		}
-		r := ""
-		if i < len(right) {
-			r = right[i]
-		}
-		pad := strings.Repeat(" ", leftWidth-lineWidth(l))
-		out = append(out, l+pad+gapStr+r)
-	}
-	return out
 }
 
 func maxLineWidth(lines []string) int {
@@ -126,5 +110,5 @@ func bannerLineStyle(line, total int) string {
 }
 
 func bannerTitleStyle(line int) string {
-	return bannerLineStyle(line, len(joinBannerArt(bannerTitle, bannerGraph, bannerArtGap)))
+	return bannerLineStyle(line, len(bannerTitle))
 }
