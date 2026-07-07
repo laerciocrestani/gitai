@@ -17,7 +17,7 @@ func TestCanPush_ahead(t *testing.T) {
 	snap := &app.WorkspaceSnapshot{
 		Overview: &gitpkg.Overview{Ahead: 2},
 	}
-	if !CanPush(snap) {
+	if !app.CanPush(snap) {
 		t.Fatal("expected push available when ahead")
 	}
 }
@@ -27,7 +27,7 @@ func TestCanPush_notConfigured(t *testing.T) {
 		Overview:  &gitpkg.Overview{Ahead: 1},
 		ConfigErr: fmt.Errorf("missing"),
 	}
-	if CanPush(snap) {
+	if app.CanPush(snap) {
 		t.Fatal("expected push blocked without config")
 	}
 }
@@ -38,7 +38,7 @@ func TestCanPR_requiresGH(t *testing.T) {
 		HasGH:     false,
 		ConfigErr: nil,
 	}
-	if CanPR(snap) {
+	if app.CanPR(snap) {
 		t.Fatal("expected PR blocked without gh")
 	}
 }
@@ -49,7 +49,7 @@ func TestCanPR_withGH(t *testing.T) {
 		HasGH:     true,
 		ConfigErr: nil,
 	}
-	if !CanPR(snap) {
+	if !app.CanPR(snap) {
 		t.Fatal("expected PR available")
 	}
 }

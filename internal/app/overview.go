@@ -22,7 +22,7 @@ func RunOverview() error {
 		return err
 	}
 
-	sess.HeaderWithContext(BuildBannerContext(snap))
+	sess.HeaderWithContext(BuildHeaderContext(snap))
 	printRecentCommits(sess, snap.Overview)
 	printBranches(sess, snap.Overview)
 	printChangedFiles(sess, snap.Overview)
@@ -125,45 +125,6 @@ func printStash(sess *ui.Session, o *gitpkg.Overview) {
 	}
 	if len(o.Stashes) > 5 {
 		sess.Detail(fmt.Sprintf("… +%d more stash(es)", len(o.Stashes)-5))
-	}
-}
-
-func BuildBannerContext(snap *WorkspaceSnapshot) ui.BannerContext {
-	ctx := ui.BannerContext{}
-	if snap.Overview != nil {
-		o := snap.Overview
-		ctx.Repo = repoDisplayName(o)
-		if o.Detached {
-			ctx.Branch = "detached HEAD"
-		} else {
-			ctx.Branch = o.Branch
-		}
-		ctx.Sync = bannerSyncLabel(o)
-	}
-	if snap.ConfigErr == nil && snap.Config != nil {
-		ctx.Provider = string(snap.Config.Provider)
-		ctx.Model = snap.Config.Model
-	}
-	return ctx
-}
-
-func bannerSyncLabel(o *gitpkg.Overview) string {
-	if o.IsDirty() {
-		n := o.Staged + o.Modified + o.Untracked
-		if n == 1 {
-			return "1 change"
-		}
-		return fmt.Sprintf("%d changes", n)
-	}
-	switch {
-	case o.Ahead > 0 && o.Behind > 0:
-		return fmt.Sprintf("↑%d ↓%d", o.Ahead, o.Behind)
-	case o.Ahead > 0:
-		return fmt.Sprintf("↑%d ahead", o.Ahead)
-	case o.Behind > 0:
-		return fmt.Sprintf("↓%d behind", o.Behind)
-	default:
-		return "in sync"
 	}
 }
 
