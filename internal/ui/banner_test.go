@@ -11,7 +11,7 @@ func TestWriteBannerContainsTitleAndVersion(t *testing.T) {
 	writeBanner(&buf, false, nil, func(text, _ string) string { return text })
 
 	out := buf.String()
-	if !strings.Contains(out, "██████╗") {
+	if !strings.Contains(out, "┏━┓") {
 		t.Fatalf("banner missing title: %q", out)
 	}
 	if !strings.Contains(out, "AI-powered Git Workflow") {
