@@ -23,19 +23,20 @@ func TestFormatDashboardHeaderContainsTitleAndVersion(t *testing.T) {
 
 func TestFormatDashboardHeaderContext(t *testing.T) {
 	ctx := &HeaderContext{
-		Repo:     "gitai",
-		Branch:   "main",
-		HeadHash: "22843f3",
-		Status:   "✓ Clean",
-		Sync:     "✓ in sync",
-		Provider: "gemini",
-		Model:    "gemini-2.5-flash-lite",
-		AIReady:  true,
-		OnBase:   true,
+		Repo:         "gitai",
+		Branch:       "main",
+		HeadHash:     "22843f3",
+		HeadFullHash: "22843f3a1b2c3d4e5f678901234567890abcdef0",
+		Status:       "✓ Clean",
+		Sync:         "✓ in sync",
+		Provider:     "gemini",
+		Model:        "gemini-2.5-flash-lite",
+		AIReady:      true,
+		OnBase:       true,
 	}
 	out := FormatDashboardHeader(ctx, 100, false, false)
 
-	for _, want := range []string{"gitai", "main", "22843f3", "gemini", "gemini-2.5-flash-lite", "Ready", "⧉"} {
+	for _, want := range []string{"gitai", "main", "22843f3", "Full SHA:", "22843f3a1b2c3d4e5f678901234567890abcdef0", "gemini", "gemini-2.5-flash-lite", "Ready", "⧉"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("header missing %q: %q", want, out)
 		}

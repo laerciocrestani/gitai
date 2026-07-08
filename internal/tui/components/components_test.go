@@ -87,6 +87,9 @@ func TestRenderSummaryShowsStats(t *testing.T) {
 			t.Fatalf("summary missing %q in:\n%s", want, plain)
 		}
 	}
+	if strings.Count(plain, "■")+strings.Count(plain, "□") != 5 {
+		t.Fatalf("summary should include 5-block diff bar: %q", plain)
+	}
 }
 
 
@@ -115,6 +118,9 @@ func TestRenderFileTableUsesDotLeaders(t *testing.T) {
 	}
 	if !strings.Contains(plain, "+100 · -50") {
 		t.Fatalf("stats should use middle dot separator: %q", plain)
+	}
+	if !strings.Contains(plain, "■■") {
+		t.Fatalf("stats should include diff bar squares: %q", plain)
 	}
 	if !strings.Contains(plain, "....") {
 		t.Fatalf("missing dot leaders: %q", plain)

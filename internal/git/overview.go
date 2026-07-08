@@ -31,6 +31,7 @@ type Overview struct {
 	Root               string
 	Branch             string
 	HeadHash           string
+	HeadFullHash       string
 	Detached           bool
 	RemoteURL          string
 	Upstream           string
@@ -65,6 +66,9 @@ func (r *Repo) Overview(baseBranch string) (*Overview, error) {
 
 	if hash, err := r.run("rev-parse", "--short", "HEAD"); err == nil {
 		o.HeadHash = hash
+	}
+	if hash, err := r.run("rev-parse", "HEAD"); err == nil {
+		o.HeadFullHash = hash
 	}
 
 	if url, err := r.run("remote", "get-url", "origin"); err == nil {

@@ -42,13 +42,15 @@ func DefaultFooterItems(snap *app.WorkspaceSnapshot) []FooterItem {
 	pushEnabled := false
 	prEnabled := false
 	syncEnabled := false
+	syncOptsEnabled := false
 
 	if snap != nil && snap.Overview != nil && snap.ConfigErr == nil {
 		o := snap.Overview
 		commitEnabled = o.IsDirty()
 		pushEnabled = app.CanPush(snap)
 		prEnabled = app.CanPR(snap)
-		syncEnabled = o.Behind > 0
+		syncEnabled = o.Behind > 0 && app.CanSync(snap)
+		syncOptsEnabled = app.CanSync(snap)
 	}
 
 	items := []FooterItem{
@@ -67,6 +69,17 @@ func DefaultFooterItems(snap *app.WorkspaceSnapshot) []FooterItem {
 	if syncEnabled {
 		syncItem := FooterItem{Key: "s", Label: "Sync", Enabled: true}
 		items = append(items[:3], append([]FooterItem{syncItem}, items[3:]...)...)
+	}
+	if syncOptsEnabled {
+		syncOptsItem := FooterItem{Key: "S", Label: "Sync…", Enabled: true}
+		insertAt := 3
+		if syncEnabled {
+			insertAt = 4
+		}
+		if insertAt > len(items) {
+			insertAt = len(items)
+		}
+		items = append(items[:insertAt], append([]FooterItem{syncOptsItem}, items[insertAt:]...)...)
 	}
 
 	return items

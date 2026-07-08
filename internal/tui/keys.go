@@ -16,6 +16,7 @@ const (
 	dashKeyBranches
 	dashKeyAdd
 	dashKeySync
+	dashKeySyncOptions
 	dashKeyOpenPR
 	dashKeyCopyHash
 	dashKeyLogs
@@ -62,8 +63,12 @@ func parseDashboardKey(msg tea.KeyMsg, snap *app.WorkspaceSnapshot) (dashKey, bo
 			return dashKeyAdd, true
 		}
 	case "s":
-		if snap != nil && snap.Overview != nil && snap.Overview.Behind > 0 {
+		if snap != nil && snap.Overview != nil && snap.Overview.Behind > 0 && app.CanSync(snap) {
 			return dashKeySync, true
+		}
+	case "S", "shift+s":
+		if app.CanSync(snap) {
+			return dashKeySyncOptions, true
 		}
 	case "o":
 		if snap != nil && snap.OpenPR != nil {

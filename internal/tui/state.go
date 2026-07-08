@@ -9,6 +9,7 @@ const (
 	ScreenLogs
 	ScreenBranches
 	ScreenAdd
+	ScreenSync
 	ScreenAction
 	ScreenReport
 	ScreenHelp

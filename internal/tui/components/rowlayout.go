@@ -10,17 +10,46 @@ import (
 )
 
 const (
-	pathPad  = 3
-	statsPad = 3
-	minDots  = 4
+	pathPad       = 3
+	statsPad      = 3
+	minDots       = 4
+	diffBarBlocks = 5
 )
 
 func buildStatsBlock(insertions, deletions int) (string, int) {
 	plus := theme.S.Success.Render(fmt.Sprintf("+%d", insertions))
 	minus := theme.S.Error.Render(fmt.Sprintf("-%d", deletions))
 	sep := theme.S.Hint.Render("·")
-	right := plus + " " + sep + " " + minus
+	bar := renderDiffBar(insertions, deletions)
+	right := plus + " " + sep + " " + minus + "  " + bar
 	return right, ui.DisplayWidth(right)
+}
+
+// renderDiffBar renders a GitHub-style 5-block addition/deletion ratio bar.
+func renderDiffBar(insertions, deletions int) string {
+	total := insertions + deletions
+	greens, reds, grays := 0, 0, diffBarBlocks
+	if total > 0 {
+		greens = insertions * diffBarBlocks / total
+		reds = deletions * diffBarBlocks / total
+		grays = diffBarBlocks - greens - reds
+	}
+
+	var b strings.Builder
+	for range greens {
+		b.WriteString(theme.S.Success.Render("■"))
+	}
+	for range reds {
+		b.WriteString(theme.S.Error.Render("■"))
+	}
+	emptyStyle := theme.S.Disabled
+	if !uiprefs.ColorsEnabled() {
+		emptyStyle = theme.S.Hint
+	}
+	for range grays {
+		b.WriteString(emptyStyle.Render("□"))
+	}
+	return b.String()
 }
 
 func renderGradientDots(count int, colorsEnabled bool) string {

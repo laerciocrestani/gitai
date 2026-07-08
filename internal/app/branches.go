@@ -45,3 +45,18 @@ func CheckoutBranch(name string) error {
 	}
 	return repo.Checkout(name)
 }
+
+// CreateBranch creates and checks out a new branch from the given source.
+func CreateBranch(name, from string) error {
+	if name == "" {
+		return fmt.Errorf("nome da branch vazio")
+	}
+	if from == "" {
+		return fmt.Errorf("branch de origem vazia")
+	}
+	repo, err := gitpkg.New()
+	if err != nil {
+		return err
+	}
+	return repo.CreateBranch(name, from)
+}

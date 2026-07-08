@@ -41,6 +41,7 @@ type actionState struct {
 	err          error
 	draft        bool
 	opts         app.Options
+	syncOpts     app.SyncOptions
 	editing      bool
 	editFocus    editFocus
 	editorsReady bool
@@ -68,6 +69,11 @@ type actionSimpleMsg struct {
 
 func newActionState(kind ActionKind) *actionState {
 	a := &actionState{kind: kind}
+	return a.start()
+}
+
+func newSyncActionState(opts app.SyncOptions) *actionState {
+	a := &actionState{kind: ActionSync, syncOpts: opts}
 	return a.start()
 }
 
@@ -133,7 +139,9 @@ func (a *actionState) directCmd() tea.Cmd {
 		case ActionPush:
 			return actionSimpleMsg{kind: a.kind, err: fmt.Errorf("push requer confirmação via preview")}
 		case ActionSync:
-			err := app.RunSync(app.SyncOptions{Progress: a.progress})
+			opts := a.syncOpts
+			opts.Progress = a.progress
+			err := app.RunSync(opts)
 			return actionSimpleMsg{kind: a.kind, err: err}
 		case ActionOpenPR:
 			client, err := prpkg.New()

@@ -38,6 +38,18 @@ func (r *Repo) Checkout(branch string) error {
 	return err
 }
 
+// CreateBranch creates a new branch from the given starting point.
+func (r *Repo) CreateBranch(name, from string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("nome da branch vazio")
+	}
+	if strings.TrimSpace(from) == "" {
+		return fmt.Errorf("branch de origem vazia")
+	}
+	_, err := r.run("checkout", "-b", name, from)
+	return err
+}
+
 // BranchDetail loads summary information for a branch relative to base.
 func (r *Repo) BranchDetail(name, base string) (*BranchDetail, error) {
 	resolved, err := r.ResolveBase(base)

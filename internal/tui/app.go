@@ -45,6 +45,7 @@ type appModel struct {
 	diff           diffModel
 	logs           logsModel
 	branches       branchesModel
+	sync           syncModel
 	add            addModel
 	report         reportModel
 	action         *actionState
@@ -61,6 +62,7 @@ func newApp(cfg refreshConfig) appModel {
 		diff:     newDiffModel(),
 		logs:     newLogsModel(),
 		branches: newBranchesModel(),
+		sync:     newSyncModel(),
 		add:      newAddModel(),
 		report:   newReportModel(),
 		refresh:  cfg,
@@ -220,6 +222,20 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, loadSnapshotCmd(m.loadProg))
 		return m, tea.Batch(cmds...)
 
+	case branchCreateMsg:
+		var cmds []tea.Cmd
+		if msg.err != nil {
+			m.branches.newErr = msg.err
+			m.status = msg.err.Error()
+			return m, nil
+		}
+		m.branches.cancelNewBranch()
+		m.screen = ScreenDashboard
+		m.loading = true
+		m.status = "Branch criada: " + msg.name
+		cmds = append(cmds, loadSnapshotCmd(m.loadProg))
+		return m, tea.Batch(cmds...)
+
 	case stageFilesMsg:
 		var cmds []tea.Cmd
 		m.add, _ = m.add.Update(msg)
@@ -290,6 +306,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateBranches(msg)
 		case ScreenAdd:
 			return m.updateAdd(msg)
+		case ScreenSync:
+			return m.updateSync(msg)
 		case ScreenAction:
 			return m.updateActionMsg(msg)
 		case ScreenReport:
@@ -315,6 +333,14 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.branches, cmd = m.branches.Update(msg)
 		return m, cmd
+	}
+
+	if m.screen == ScreenSync {
+		var cmd tea.Cmd
+		cmd, _ = m.sync.Update(msg)
+		if cmd != nil {
+			return m, cmd
+		}
 	}
 
 	if m.screen == ScreenAdd {
@@ -403,9 +429,14 @@ func (m appModel) updateDashboard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.action.previewCmd()
 		case dashKeySync:
 			m.screen = ScreenAction
-			m.action = newActionState(ActionSync)
+			m.action = newSyncActionState(app.SyncOptions{})
 			m.status = "Sync"
 			return m, m.action.directCmd()
+		case dashKeySyncOptions:
+			m.screen = ScreenSync
+			m.status = "Sync · opções"
+			m.sync.Load(m.snapshot)
+			return m, nil
 		case dashKeyOpenPR:
 			m.screen = ScreenAction
 			m.action = newActionState(ActionOpenPR)
@@ -413,7 +444,10 @@ func (m appModel) updateDashboard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.action.directCmd()
 		case dashKeyCopyHash:
 			if m.snapshot != nil && m.snapshot.Overview != nil {
-				hash := m.snapshot.Overview.HeadHash
+				hash := m.snapshot.Overview.HeadFullHash
+				if hash == "" {
+					hash = m.snapshot.Overview.HeadHash
+				}
 				if err := ui.CopyToClipboard(hash); err != nil {
 					m.status = "Erro ao copiar hash"
 				} else {
@@ -482,9 +516,61 @@ func (m appModel) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m appModel) updateBranches(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m appModel) updateSync(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
+		if m.sync.screen == syncScreenBase {
+			m.sync.back()
+			return m, nil
+		}
+		m.screen = ScreenDashboard
+		m.status = "Pronto"
+		return m, nil
+	case "up", "k":
+		if m.sync.screen == syncScreenModes {
+			m.sync.moveCursor(-1)
+		}
+		return m, nil
+	case "down", "j":
+		if m.sync.screen == syncScreenModes {
+			m.sync.moveCursor(1)
+		}
+		return m, nil
+	case "b":
+		if m.sync.screen == syncScreenModes {
+			return m, m.sync.startBaseEdit(m.width)
+		}
+	case "enter":
+		if m.sync.screen == syncScreenBase {
+			m.sync.confirmBaseEdit()
+			return m, nil
+		}
+		if !m.sync.canRun() {
+			return m, nil
+		}
+		opts := m.sync.buildSyncOptions()
+		m.screen = ScreenAction
+		m.action = newSyncActionState(opts)
+		m.status = "Sync"
+		return m, m.action.directCmd()
+	}
+	var cmd tea.Cmd
+	cmd, _ = m.sync.Update(msg)
+	return m, cmd
+}
+
+func (m appModel) updateBranches(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.branches.mode == branchesModeNew {
+		if cmd, handled := m.branches.updateNewBranch(msg); handled {
+			return m, cmd
+		}
+	}
+
+	switch msg.String() {
+	case "esc":
+		if m.branches.mode == branchesModeNew {
+			return m, m.branches.newBranchBack()
+		}
 		if m.branches.confirmDirty {
 			m.branches.confirmDirty = false
 			m.branches.checkoutTarget = ""
@@ -493,12 +579,22 @@ func (m appModel) updateBranches(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = ScreenDashboard
 		m.status = "Pronto"
 		return m, nil
+	case "n":
+		if m.branches.mode == branchesModeList {
+			return m, m.branches.startNewBranch()
+		}
 	case "up", "k":
-		return m, m.branches.moveCursor(-1)
+		if m.branches.mode == branchesModeList {
+			return m, m.branches.moveCursor(-1)
+		}
 	case "down", "j":
-		return m, m.branches.moveCursor(1)
+		if m.branches.mode == branchesModeList {
+			return m, m.branches.moveCursor(1)
+		}
 	case "enter":
-		return m, m.branches.requestCheckout()
+		if m.branches.mode == branchesModeList {
+			return m, m.branches.requestCheckout()
+		}
 	}
 	var cmd tea.Cmd
 	m.branches, cmd = m.branches.Update(msg)
@@ -655,10 +751,17 @@ func (m appModel) View() string {
 		help = logsHelpLine()
 	case ScreenBranches:
 		b.WriteString(m.branches.View(m.width))
-		help = branchesHelpLine()
+		if m.branches.mode == branchesModeNew {
+			help = newBranchHelpLine(m.branches.newStep)
+		} else {
+			help = branchesHelpLine()
+		}
 	case ScreenAdd:
 		b.WriteString(m.add.View(m.width))
 		help = addHelpLine()
+	case ScreenSync:
+		b.WriteString(m.sync.View(m.width))
+		help = syncHelpLine(m.sync.screen, m.sync.dirty)
 	case ScreenReport:
 		b.WriteString(m.report.View())
 		help = reportHelpLine()

@@ -3,11 +3,19 @@ package tui
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/laerciocrestani/gitai/internal/app"
 	gitpkg "github.com/laerciocrestani/gitai/internal/git"
 	"github.com/laerciocrestani/gitai/internal/tui/components"
+)
+
+type branchesMode int
+
+const (
+	branchesModeList branchesMode = iota
+	branchesModeNew
 )
 
 type branchesModel struct {
@@ -25,6 +33,19 @@ type branchesModel struct {
 	dirty          bool
 	ready          bool
 	checkoutOK     bool
+
+	mode             branchesMode
+	newStep          components.NewBranchStep
+	fromCursor       int
+	templateCursor   int
+	fromBranch       string
+	selectedTemplate components.NewBranchTemplate
+	templateItems    []components.NewBranchTemplateItem
+	fromViewport     viewport.Model
+	templateViewport viewport.Model
+	nameInput        textinput.Model
+	nameReady        bool
+	newErr           error
 }
 
 type branchDetailMsg struct {
@@ -55,6 +76,8 @@ func (m *branchesModel) Load(snap *app.WorkspaceSnapshot) tea.Cmd {
 	m.checkoutTarget = ""
 	m.checkoutOK = false
 	m.err = nil
+	m.mode = branchesModeList
+	m.newErr = nil
 
 	if branches, err := app.ListBranches(); err == nil && len(branches) > 0 {
 		m.branches = branches
@@ -97,12 +120,21 @@ func (m *branchesModel) SetSize(width, height int) {
 
 	if !m.ready {
 		m.listViewport = viewport.New(width, listRows)
+		m.fromViewport = viewport.New(width, listRows)
+		m.templateViewport = viewport.New(width, listRows)
 		m.ready = true
 	} else {
 		m.listViewport.Width = width
 		m.listViewport.Height = listRows
+		m.fromViewport.Width = width
+		m.fromViewport.Height = listRows
+		m.templateViewport.Width = width
+		m.templateViewport.Height = listRows
 	}
 	m.refreshListContent()
+	if m.mode == branchesModeNew {
+		m.refreshNewBranchContent()
+	}
 }
 
 func (m *branchesModel) refreshListContent() {
@@ -241,6 +273,10 @@ func (m branchesModel) Update(msg tea.Msg) (branchesModel, tea.Cmd) {
 }
 
 func (m branchesModel) View(width int) string {
+	if m.mode == branchesModeNew {
+		return m.viewNewBranch(width)
+	}
+
 	var b strings.Builder
 
 	if m.err != nil {
@@ -273,5 +309,19 @@ func (m branchesModel) View(width int) string {
 func branchesHelpLine() string {
 	return styleKey.Render("↑↓") + " navegar  " +
 		styleKey.Render("Enter") + " checkout  " +
+		styleKey.Render("n") + " nova branch  " +
 		styleKey.Render("esc") + " voltar"
+}
+
+func newBranchHelpLine(step components.NewBranchStep) string {
+	switch step {
+	case components.NewBranchStepName:
+		return styleKey.Render("Enter") + " criar  " +
+			styleKey.Render("esc") + " voltar  " +
+			styleKey.Render("tab") + " editar nome"
+	default:
+		return styleKey.Render("↑↓") + " navegar  " +
+			styleKey.Render("Enter") + " avançar  " +
+			styleKey.Render("esc") + " voltar"
+	}
 }

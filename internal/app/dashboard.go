@@ -27,6 +27,14 @@ type TUINextAction struct {
 	Label   string
 }
 
+// CanSync reports whether sync can run (requires a clean working tree).
+func CanSync(snap *WorkspaceSnapshot) bool {
+	if snap == nil || snap.Overview == nil {
+		return false
+	}
+	return !snap.Overview.IsDirty()
+}
+
 // BuildHeaderContext builds dashboard header data from a workspace snapshot.
 func BuildHeaderContext(snap *WorkspaceSnapshot) ui.HeaderContext {
 	ctx := ui.HeaderContext{}
@@ -43,6 +51,7 @@ func BuildHeaderContext(snap *WorkspaceSnapshot) ui.HeaderContext {
 			ctx.Branch = o.Branch
 		}
 		ctx.HeadHash = o.HeadHash
+		ctx.HeadFullHash = o.HeadFullHash
 		ctx.Status = headerStatusLabel(o)
 		ctx.Sync = headerSyncLabel(o)
 		ctx.OnBase = !o.Detached && o.Branch == o.BaseBranch

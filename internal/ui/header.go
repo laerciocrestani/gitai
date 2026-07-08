@@ -11,7 +11,8 @@ import (
 type HeaderContext struct {
 	Repo     string
 	Branch   string
-	HeadHash string
+	HeadHash     string
+	HeadFullHash string
 	Status   string
 	Sync     string
 	Provider string
@@ -73,14 +74,7 @@ func FormatDashboardHeader(ctx *HeaderContext, width int, dryRun bool, colorsEna
 				commitNote = paint("● "+commitNote, green)
 			}
 		}
-		hashVal := ctx.HeadHash
-		if hashVal == "" {
-			hashVal = "—"
-		}
-		commitValue := hashVal
-		if ctx.HeadHash != "" {
-			commitValue += "  " + paint("⧉", dim)
-		}
+		commitValue := formatCommitValue(ctx.HeadHash, ctx.HeadFullHash, paint)
 		lines = append(lines, RenderBoxLine(headerMetaRow("Commit", commitValue, commitNote, inner, paint), width))
 	} else {
 		fallback := "AI Git Workflow · " + Version()
@@ -162,6 +156,31 @@ func aiStatusLabel(ready bool) string {
 		return "⚡ Ready"
 	}
 	return "⚠ Setup"
+}
+
+func formatCommitValue(shortHash, fullHash string, paint func(string, string) string) string {
+	if shortHash == "" && fullHash == "" {
+		return "—"
+	}
+	short := shortHash
+	if short == "" {
+		short = shortHashFromFull(fullHash)
+	}
+	val := short
+	if fullHash != "" {
+		val += " ·  Full SHA: " + fullHash
+	}
+	if shortHash != "" || fullHash != "" {
+		val += "  " + paint("⧉", dim)
+	}
+	return val
+}
+
+func shortHashFromFull(full string) string {
+	if len(full) <= 7 {
+		return full
+	}
+	return full[:7]
 }
 
 func truncateRunewidth(s string, max int) string {
