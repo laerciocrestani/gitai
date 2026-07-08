@@ -8,6 +8,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	gitpkg "github.com/laerciocrestani/gitai/internal/git"
 	"github.com/laerciocrestani/gitai/internal/tui/theme"
+	"github.com/laerciocrestani/gitai/internal/ui"
+)
+
+const (
+	statsColPlus  = 6
+	statsColMinus = 6
 )
 
 // RenderFileTable renders changed files as an aligned table.
@@ -26,26 +32,29 @@ func RenderFileTable(changes []gitpkg.FileChange, width, maxRows int) string {
 		limit = maxRows
 	}
 
-	inner := width - 4
-	if inner < 40 {
-		inner = 40
-	}
-
-	pathWidth := inner - 24
+	inner := ui.ContentInner(width)
+	statsWidth := statsColPlus + 1 + statsColMinus
+	pathWidth := inner - 4 - 1 - statsWidth
 	if pathWidth < 20 {
 		pathWidth = 20
 	}
 
-	header := fmt.Sprintf("%-4s %-*s %6s %6s", "TYPE", pathWidth, "FILE", "+", "-")
-	var rows []string
-	rows = append(rows, theme.S.Hint.Render(header))
+	headerRight := formatStatsBlock(
+		theme.S.Hint.Render(padPlain("+", statsColPlus)),
+		theme.S.Hint.Render(padPlain("-", statsColMinus)),
+	)
+	headerLeft := theme.S.Hint.Render(fmt.Sprintf("%-4s %s", "TYPE", padPlain("FILE", pathWidth)))
+	rows := []string{PadLine(headerLeft, headerRight, inner)}
 
 	for _, f := range sorted[:limit] {
 		tag := statusTag(f.Status)
 		path := truncate(f.Path, pathWidth)
-		plus := padNumber(theme.S.Success.Render(fmt.Sprintf("%d", f.Insertions)), 6)
-		minus := padNumber(theme.S.Error.Render(fmt.Sprintf("%d", f.Deletions)), 6)
-		row := fmt.Sprintf("%-4s %-*s %s %s", tag, pathWidth, path, plus, minus)
+		right := formatStatsBlock(
+			theme.S.Success.Render(padPlain(fmt.Sprintf("+%d", f.Insertions), statsColPlus)),
+			theme.S.Error.Render(padPlain(fmt.Sprintf("-%d", f.Deletions), statsColMinus)),
+		)
+		left := fmt.Sprintf("%-4s %s", tag, padPlain(path, pathWidth))
+		row := PadLine(left, right, inner)
 		rows = append(rows, fileRowStyle(f.Status).Render(row))
 	}
 
@@ -57,6 +66,18 @@ func RenderFileTable(changes []gitpkg.FileChange, width, maxRows int) string {
 
 	body := strings.Join(rows, "\n")
 	return RenderPanel("Changed Files", body, width)
+}
+
+func formatStatsBlock(plus, minus string) string {
+	return PadLine(plus, minus, statsColPlus+1+statsColMinus)
+}
+
+func padPlain(s string, width int) string {
+	w := ui.DisplayWidth(s)
+	if w >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-w)
 }
 
 func sortFileChanges(changes []gitpkg.FileChange) []gitpkg.FileChange {
@@ -71,14 +92,6 @@ func sortFileChanges(changes []gitpkg.FileChange) []gitpkg.FileChange {
 		return sorted[i].Path < sorted[j].Path
 	})
 	return sorted
-}
-
-func padNumber(colored string, width int) string {
-	w := lipgloss.Width(colored)
-	if w >= width {
-		return colored
-	}
-	return strings.Repeat(" ", width-w) + colored
 }
 
 func fileRowStyle(status string) lipgloss.Style {

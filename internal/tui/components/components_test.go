@@ -53,6 +53,9 @@ func TestRenderPanelWidthAlignment(t *testing.T) {
 		if line == "" {
 			continue
 		}
+		if strings.HasSuffix(strings.TrimSpace(line), "│") {
+			t.Fatalf("line %d should not end with right border: %q", i, line)
+		}
 		got := runewidth.StringWidth(line)
 		if got != width {
 			t.Fatalf("line %d width = %d, want %d: %q", i, got, width, line)

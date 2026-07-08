@@ -7,6 +7,7 @@ import (
 
 	"github.com/laerciocrestani/gitai/internal/app"
 	"github.com/laerciocrestani/gitai/internal/tui/theme"
+	"github.com/laerciocrestani/gitai/internal/ui"
 )
 
 // RenderSummary renders the repository change summary panel.
@@ -21,7 +22,7 @@ func RenderSummary(summary app.ChangeSummary, width int) string {
 	line1 := PadLine(
 		fmt.Sprintf("Files Changed: %d", summary.FileCount),
 		stats,
-		width-4,
+		ui.ContentInner(width),
 	)
 
 	var langParts []string

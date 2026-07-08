@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mattn/go-runewidth"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // HeaderContext holds repository and AI status for the dashboard header.
@@ -38,26 +38,21 @@ func FormatDashboardHeader(ctx *HeaderContext, width int, dryRun bool, colorsEna
 		return code + text + reset
 	}
 
+	style := headerBoxStyle(colorsEnabled)
 	var lines []string
-	top := boxTop(width)
-	lines = append(lines, top)
+	lines = append(lines, RenderBoxTop("GITAI", width, style))
 
-	titleLeft := paint("GITAI", bold+cyan)
 	tagline := paint("AI Git Workflow", dim)
 	version := Version()
 	if dryRun {
 		version += " · dry-run"
 	}
 	version = paint(version, dim)
-	titleLine := fitLine([]string{titleLeft, tagline, version}, width-4)
-	lines = append(lines, boxRow(titleLine, width))
+	lines = append(lines, RenderBoxLine(PadLine(tagline, version, ContentInner(width)), width))
 
-	lines = append(lines, boxDivider(width))
-
-	inner := width - 4
 	if ctx != nil {
-		lines = append(lines, boxRow(headerMetaRow("Repository", ctx.Repo, ctx.Status, inner, paint), width))
-		lines = append(lines, boxRow(headerMetaRow("Branch", ctx.Branch, ctx.Sync, inner, paint), width))
+		lines = append(lines, RenderBoxLine(headerMetaRow("Repository", ctx.Repo, ctx.Status, ContentInner(width), paint), width))
+		lines = append(lines, RenderBoxLine(headerMetaRow("Branch", ctx.Branch, ctx.Sync, ContentInner(width), paint), width))
 
 		aiLabel := formatProviderModel(ctx.Provider, ctx.Model)
 		aiStatus := aiStatusLabel(ctx.AIReady)
@@ -68,7 +63,7 @@ func FormatDashboardHeader(ctx *HeaderContext, width int, dryRun bool, colorsEna
 				aiStatus = paint(aiStatus, yellow)
 			}
 		}
-		lines = append(lines, boxRow(headerMetaRow("AI", aiLabel, aiStatus, inner, paint), width))
+		lines = append(lines, RenderBoxLine(headerMetaRow("AI", aiLabel, aiStatus, ContentInner(width), paint), width))
 
 		commitNote := ""
 		if ctx.OnBase {
@@ -85,22 +80,40 @@ func FormatDashboardHeader(ctx *HeaderContext, width int, dryRun bool, colorsEna
 		if ctx.HeadHash != "" {
 			commitValue += "  " + paint("⧉", dim)
 		}
-		lines = append(lines, boxRow(headerMetaRow("Commit", commitValue, commitNote, inner, paint), width))
+		lines = append(lines, RenderBoxLine(headerMetaRow("Commit", commitValue, commitNote, ContentInner(width), paint), width))
 	} else {
 		fallback := "AI Git Workflow · " + Version()
 		if dryRun {
 			fallback += " · dry-run"
 		}
-		lines = append(lines, boxRow(paint(fallback, dim), width))
+		lines = append(lines, RenderBoxLine(paint(fallback, dim), width))
 	}
 
-	lines = append(lines, boxBottom(width))
+	lines = append(lines, RenderBoxBottom(width, style))
 	return strings.Join(lines, "\n") + "\n"
 }
 
 // FormatBanner renders the dashboard header (replaces the legacy ASCII banner).
 func FormatBanner(dryRun bool, ctx *BannerContext, colorsEnabled bool) string {
 	return FormatDashboardHeader(ctx, defaultHeaderWidth, dryRun, colorsEnabled)
+}
+
+func headerBoxStyle(colorsEnabled bool) BoxStyle {
+	title := func(s string) string {
+		if !colorsEnabled {
+			return s
+		}
+		return bold + cyan + s + reset
+	}
+	return BoxStyle{
+		Title: title,
+		TopDash: func(p float64) string {
+			return TopGradientDash(p, colorsEnabled)
+		},
+		BottomDash: func(p float64) string {
+			return BottomGradientDash(p, colorsEnabled)
+		},
+	}
 }
 
 func formatProviderModel(provider, model string) string {
@@ -133,90 +146,23 @@ func headerMetaRow(label, value, right string, innerWidth int, paint func(string
 	if val == "" {
 		val = "—"
 	}
-	if right != "" {
-		rightW := runewidth.StringWidth(right)
-		labelW := runewidth.StringWidth(labelPart) + 1
-		maxVal := innerWidth - labelW - rightW - 1
-		if maxVal < 1 {
-			maxVal = 1
-		}
-		if runewidth.StringWidth(val) > maxVal {
-			val = truncateRunewidth(val, maxVal)
-		}
-	}
 	left := labelPart + " " + val
 	if right == "" {
-		return padToWidth(left, innerWidth)
-	}
-	gap := innerWidth - runewidth.StringWidth(left) - runewidth.StringWidth(right)
-	if gap < 1 {
-		gap = 1
-	}
-	return left + strings.Repeat(" ", gap) + right
-}
-
-func fitLine(parts []string, width int) string {
-	if len(parts) == 0 {
-		return strings.Repeat(" ", width)
-	}
-	if len(parts) == 1 {
-		return padToWidth(parts[0], width)
+		return PadLine(left, "", innerWidth)
 	}
 
-	left := parts[0]
-	right := parts[len(parts)-1]
-	mid := strings.Join(parts[1:len(parts)-1], "  ")
-
-	rightW := runewidth.StringWidth(right)
-	if rightW >= width {
-		return truncateRunewidth(right, width)
+	rightW := DisplayWidth(right)
+	maxVal := innerWidth - DisplayWidth(labelPart) - 1 - rightW
+	if maxVal < 1 {
+		maxVal = 1
 	}
-
-	leftBlock := left
-	if mid != "" {
-		leftBlock = left + "  " + mid
+	if DisplayWidth(val) > maxVal {
+		val = truncateRunewidth(val, maxVal)
+		left = labelPart + " " + val
 	}
-
-	gap := width - runewidth.StringWidth(leftBlock) - rightW
-	if gap < 1 {
-		leftBlock = truncateRunewidth(leftBlock, width-rightW-1)
-		gap = 1
-	}
-	return leftBlock + strings.Repeat(" ", gap) + right
-}
-
-func padToWidth(s string, width int) string {
-	w := runewidth.StringWidth(s)
-	if w >= width {
-		return s
-	}
-	return s + strings.Repeat(" ", width-w)
-}
-
-func boxTop(width int) string {
-	return "╭" + strings.Repeat("─", width-2) + "╮"
-}
-
-func boxBottom(width int) string {
-	return "╰" + strings.Repeat("─", width-2) + "╯"
-}
-
-func boxDivider(width int) string {
-	return "├" + strings.Repeat("─", width-2) + "┤"
-}
-
-func boxRow(content string, width int) string {
-	inner := width - 4
-	if runewidth.StringWidth(content) > inner {
-		content = truncateRunewidth(content, inner)
-	}
-	padding := inner - runewidth.StringWidth(content)
-	if padding < 0 {
-		padding = 0
-	}
-	return "│ " + content + strings.Repeat(" ", padding) + " │"
+	return PadLine(left, right, innerWidth)
 }
 
 func truncateRunewidth(s string, max int) string {
-	return runewidth.Truncate(s, max, "…")
+	return ansi.Truncate(s, max, "…")
 }
