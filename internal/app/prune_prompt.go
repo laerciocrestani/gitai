@@ -38,6 +38,11 @@ func RecommendPruneBranchAction(issue *gitpkg.BranchPruneIssue) PruneBranchRecom
 	}
 
 	switch {
+	case issue.UpstreamGone:
+		return PruneBranchRecommendation{
+			Action: PruneBranchDeleteForce,
+			Reason: "o upstream foi removido no remoto (fetch --prune)",
+		}
 	case issue.LocalAhead > 0 && issue.RemoteAhead == 0:
 		return PruneBranchRecommendation{
 			Action: PruneBranchDeleteForce,

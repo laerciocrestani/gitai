@@ -14,6 +14,7 @@ type BranchPruneIssue struct {
 	RemoteAhead   int
 	LocalCommits  []string
 	RemoteCommits []string
+	UpstreamGone  bool
 }
 
 const maxPruneCommitPreview = 8
@@ -49,6 +50,14 @@ func (r *Repo) LocalBranchPruneIssue(name string) (*BranchPruneIssue, error) {
 	upstream, err := r.BranchUpstream(name)
 	if err != nil {
 		return nil, nil
+	}
+
+	if _, err := r.run("rev-parse", "--verify", upstream); err != nil {
+		return &BranchPruneIssue{
+			Name:         name,
+			Upstream:     upstream,
+			UpstreamGone: true,
+		}, nil
 	}
 
 	ahead, behind, err := r.BranchAheadBehind(name, upstream)

@@ -35,3 +35,12 @@ func TestRecommendPruneBranchAction_diverged(t *testing.T) {
 		t.Fatalf("action = %v, want keep", rec.Action)
 	}
 }
+
+func TestRecommendPruneBranchAction_upstreamGone(t *testing.T) {
+	rec := RecommendPruneBranchAction(&gitpkg.BranchPruneIssue{
+		UpstreamGone: true,
+	})
+	if rec.Action != PruneBranchDeleteForce {
+		t.Fatalf("action = %v, want force delete", rec.Action)
+	}
+}

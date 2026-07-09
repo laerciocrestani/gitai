@@ -46,6 +46,45 @@ func (r *Repo) PullBase(base string) error {
 	return err
 }
 
+// LocalPruneCandidates lists local branches to remove during sync --prune:
+// merged into base and/or whose upstream was deleted on the remote (gone).
+func (r *Repo) LocalPruneCandidates(base string) ([]string, error) {
+	merged, err := r.MergedLocalBranches(base)
+	if err != nil {
+		return nil, err
+	}
+	gone, err := r.LocalBranchesWithGoneUpstream(base)
+	if err != nil {
+		return nil, err
+	}
+	return uniqueStrings(append(merged, gone...)), nil
+}
+
+// LocalBranchesWithGoneUpstream returns local branches whose tracking ref was
+// removed by fetch --prune (git branch -vv shows "[origin/foo: gone]").
+func (r *Repo) LocalBranchesWithGoneUpstream(base string) ([]string, error) {
+	out, err := r.run("branch", "-vv", "--color=never")
+	if err != nil {
+		return nil, err
+	}
+
+	current, _ := r.CurrentBranch()
+	protected := protectedBranches(base)
+
+	var branches []string
+	for _, line := range splitLines(out) {
+		name, tracking, ok := parseBranchVVLine(line)
+		if !ok || !isGoneUpstream(tracking) {
+			continue
+		}
+		if name == "" || protected[name] || name == current {
+			continue
+		}
+		branches = append(branches, name)
+	}
+	return uniqueStrings(branches), nil
+}
+
 func (r *Repo) MergedLocalBranches(base string) ([]string, error) {
 	resolved, err := r.mergedRef(base)
 	if err != nil {
@@ -148,6 +187,39 @@ func protectedBranches(base string) map[string]bool {
 		}
 	}
 	return protected
+}
+
+func parseBranchVVLine(line string) (name, tracking string, ok bool) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "", "", false
+	}
+	line = strings.TrimPrefix(strings.TrimPrefix(line, "*"), " ")
+	parts := strings.Fields(line)
+	if len(parts) == 0 {
+		return "", "", false
+	}
+	name = parts[0]
+	for i, part := range parts {
+		if strings.HasPrefix(part, "[") && strings.HasSuffix(part, "]") {
+			return name, strings.Trim(part, "[]"), true
+		}
+		if strings.HasPrefix(part, "[") {
+			tracking = strings.TrimPrefix(part, "[")
+			for j := i + 1; j < len(parts); j++ {
+				tracking += " " + parts[j]
+				if strings.HasSuffix(parts[j], "]") {
+					tracking = strings.TrimSuffix(tracking, "]")
+					return name, tracking, true
+				}
+			}
+		}
+	}
+	return name, "", true
+}
+
+func isGoneUpstream(tracking string) bool {
+	return strings.Contains(tracking, ": gone")
 }
 
 func splitLines(s string) []string {

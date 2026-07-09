@@ -93,7 +93,7 @@ func RunSync(opts SyncOptions) error {
 	if err := prog.Step("Finding merged branches", func() error {
 		var err error
 		if opts.pruneLocal() {
-			local, err = repo.MergedLocalBranches(base)
+			local, err = repo.LocalPruneCandidates(base)
 			if err != nil {
 				return err
 			}
@@ -110,7 +110,7 @@ func RunSync(opts SyncOptions) error {
 	}
 
 	if len(local) == 0 && len(remote) == 0 {
-		prog.Info("No merged branches to prune")
+		prog.Info("No branches to prune")
 		prog.Success("Synced with origin/" + base)
 		return nil
 	}
@@ -168,7 +168,13 @@ func pruneLocal(prog Progress, repo *gitpkg.Repo, name string, dryRun bool) (boo
 	}
 
 	force := false
-	if issue != nil && issue.LocalAhead > 0 {
+	if issue != nil && issue.UpstreamGone {
+		if dryRun {
+			prog.Info(name + ": upstream removido no remoto — usaria git branch -D")
+			return false, nil
+		}
+		force = true
+	} else if issue != nil && issue.LocalAhead > 0 {
 		if dryRun {
 			prog.Info(fmt.Sprintf(
 				"%s: diverge de %s (%d commit(s) local não enviado(s)) — usaria -D após confirmação",
@@ -182,21 +188,23 @@ func pruneLocal(prog Progress, repo *gitpkg.Repo, name string, dryRun bool) (boo
 
 		sess, ok := prog.(*ui.Session)
 		if !ok {
-			return false, fmt.Errorf(
-				"branch %s diverge de %s (%d commit(s) local não enviado(s)) — use terminal interativo para escolher",
-				name, issue.Upstream, issue.LocalAhead,
-			)
+			rec := RecommendPruneBranchAction(issue)
+			if rec.Action == PruneBranchKeep {
+				prog.Info("Mantida: " + name + " — " + rec.Reason)
+				return false, nil
+			}
+			force = true
+		} else {
+			action, err := promptPruneBranchConflict(sess, issue)
+			if err != nil {
+				return false, err
+			}
+			if action == PruneBranchKeep {
+				prog.Info("Mantida: " + name)
+				return false, nil
+			}
+			force = true
 		}
-
-		action, err := promptPruneBranchConflict(sess, issue)
-		if err != nil {
-			return false, err
-		}
-		if action == PruneBranchKeep {
-			prog.Info("Mantida: " + name)
-			return false, nil
-		}
-		force = true
 	}
 
 	label := "Removing local " + name
