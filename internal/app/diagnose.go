@@ -1,0 +1,605 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/laerciocrestani/gitai/internal/ai"
+	"github.com/laerciocrestani/gitai/internal/config"
+	gitpkg "github.com/laerciocrestani/gitai/internal/git"
+	prpkg "github.com/laerciocrestani/gitai/internal/pr"
+	"github.com/laerciocrestani/gitai/internal/ui"
+)
+
+// DoctorOptions controla a execução do doctor.
+type DoctorOptions struct {
+	Explain  bool
+	Base     string
+	Progress Progress
+}
+
+// DoctorReport é o resultado formatado do doctor.
+type DoctorReport struct {
+	Overall   gitpkg.HealthLevel
+	Lines     []string
+	Facts     string
+	AI        *ai.HealthExplanation
+	Usage     ai.UsageSummary
+}
+
+// RunDoctor analisa a saúde do repositório e retorna um panorama.
+func RunDoctor(ctx context.Context, opts DoctorOptions) (*DoctorReport, error) {
+	prog := opts.Progress
+	if prog == nil {
+		sess := ui.New("doctor", false)
+		sess.Header()
+		prog = sess
+	}
+
+	var repo *gitpkg.Repo
+	if err := prog.Step("Opening repository", func() error {
+		r, err := gitpkg.New()
+		if err != nil {
+			return err
+		}
+		if err := r.IsRepo(); err != nil {
+			return fmt.Errorf("diretório atual não é um repositório git")
+		}
+		repo = r
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	base := opts.Base
+	var cfg *config.Config
+	if err := prog.Step("Loading configuration", func() error {
+		var err error
+		cfg, err = config.Load()
+		if err == nil && base == "" {
+			base = cfg.BaseBranch
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if base == "" {
+		base = "main"
+	}
+
+	var snap *gitpkg.HealthSnapshot
+	if err := prog.Step("Analyzing repository health", func() error {
+		var err error
+		snap, err = repo.CollectHealthSnapshot(base)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	var openPR *prpkg.PRView
+	if client, err := prpkg.New(); err == nil {
+		openPR, _ = client.ViewCurrent()
+	}
+
+	issues := analyzeHealthIssues(snap)
+	recommendations := buildHealthRecommendations(snap, issues)
+	overall := overallHealth(issues, snap)
+
+	report := &DoctorReport{
+		Overall: overall,
+		Facts:   formatHealthFacts(snap, openPR, issues, recommendations),
+		Lines:   formatDoctorLines(snap, openPR, issues, recommendations, overall, nil),
+	}
+
+	if opts.Explain {
+		if cfg == nil || cfg.APIKey == "" {
+			return report, fmt.Errorf("API key não configurada — use gitai config ou GITAI_API_KEY para --explain")
+		}
+
+		var provider ai.Provider
+		if err := prog.Step("Consulting AI", func() error {
+			var err error
+			provider, err = ai.New(cfg)
+			if err != nil {
+				return err
+			}
+			explanation, err := provider.ExplainHealth(withAINotices(ctx, prog), report.Facts, cfg.Language)
+			if err != nil {
+				return err
+			}
+			report.AI = explanation
+			report.Usage = provider.UsageStats()
+			return nil
+		}); err != nil {
+			return report, err
+		}
+
+		report.Lines = formatDoctorLines(snap, openPR, issues, recommendations, overall, report.AI)
+		if cfg != nil && len(report.Usage.Records) > 0 {
+			recordAIUsage("doctor", cfg, report.Usage)
+		}
+	}
+
+	return report, nil
+}
+
+// LoadDoctorReport coleta o doctor sem UI de progresso (TUI).
+func LoadDoctorReport(ctx context.Context, explain bool) (*DoctorReport, error) {
+	return RunDoctor(ctx, DoctorOptions{Explain: explain})
+}
+
+// PrintDoctor exibe o relatório na CLI.
+func PrintDoctor(report *DoctorReport, prog Progress) {
+	if report == nil {
+		return
+	}
+	if prog == nil {
+		for _, line := range report.Lines {
+			fmt.Println(line)
+		}
+		return
+	}
+
+	prog.Info("Repository health")
+	for _, line := range report.Lines {
+		if strings.HasPrefix(line, "  ") {
+			prog.Detail(strings.TrimPrefix(line, "  "))
+			continue
+		}
+		if line == "" {
+			fmt.Println()
+			continue
+		}
+		prog.Info(line)
+	}
+
+	if len(report.Usage.Records) > 0 {
+		cfg, _ := config.Load()
+		if cfg != nil {
+			for _, line := range report.Usage.FormatLines(cfg) {
+				prog.Detail(line)
+			}
+		}
+	}
+
+	prog.Success("Diagnóstico concluído")
+}
+
+// DiagnoseSyncFailure imprime orientação quando o sync falha por divergência.
+func DiagnoseSyncFailure(base string, syncErr error, prog Progress) {
+	if syncErr == nil || !isFastForwardError(syncErr) {
+		return
+	}
+
+	repo, err := gitpkg.New()
+	if err != nil {
+		return
+	}
+
+	snap, err := repo.CollectHealthSnapshot(base)
+	if err != nil {
+		return
+	}
+
+	issues := analyzeHealthIssues(snap)
+	recommendations := buildHealthRecommendations(snap, issues)
+	overall := overallHealth(issues, snap)
+
+	if prog == nil {
+		prog = ui.New("sync", false)
+	}
+
+	prog.Warn("Pull bloqueado — branches divergiram (fast-forward impossível)")
+	prog.Info("Diagnóstico rápido")
+	for _, line := range formatDoctorLines(snap, nil, issues, recommendations, overall, nil) {
+		if strings.HasPrefix(line, "  ") {
+			prog.Detail(strings.TrimPrefix(line, "  "))
+		} else if line != "" {
+			prog.Info(line)
+		}
+	}
+	prog.Info("Para panorama completo: gitai doctor")
+}
+
+func isFastForwardError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "fast-forward") ||
+		strings.Contains(msg, "diverging branches")
+}
+
+type healthIssue struct {
+	Level  gitpkg.HealthLevel
+	Code   string
+	Title  string
+	Detail string
+}
+
+func analyzeHealthIssues(snap *gitpkg.HealthSnapshot) []healthIssue {
+	if snap == nil {
+		return nil
+	}
+
+	var issues []healthIssue
+
+	if snap.IsDirty {
+		issues = append(issues, healthIssue{
+			Level:  gitpkg.HealthWarn,
+			Code:   "dirty_tree",
+			Title:  "Working tree com alterações",
+			Detail: fmt.Sprintf("%d staged · %d modified · %d untracked", snap.Staged, snap.Modified, snap.Untracked),
+		})
+	}
+
+	if snap.Diverged {
+		issues = append(issues, healthIssue{
+			Level:  gitpkg.HealthCritical,
+			Code:   "branch_diverged",
+			Title:  fmt.Sprintf("Branch %q divergiu do upstream", snap.Branch),
+			Detail: fmt.Sprintf("↑%d commit(s) local · ↓%d commit(s) remoto", snap.Ahead, snap.Behind),
+		})
+	} else if snap.Behind > 0 && !snap.IsDirty {
+		issues = append(issues, healthIssue{
+			Level:  gitpkg.HealthWarn,
+			Code:   "behind_remote",
+			Title:  "Branch atrás do remoto",
+			Detail: fmt.Sprintf("%d commit(s) no remoto ainda não puxados", snap.Behind),
+		})
+	}
+
+	if snap.BaseDivergence != nil && (snap.BaseDivergence.LocalAhead > 0 || snap.BaseDivergence.RemoteAhead > 0) {
+		div := snap.BaseDivergence
+		level := gitpkg.HealthCritical
+		if div.LocalAhead > 0 && div.RemoteAhead > 0 {
+			level = gitpkg.HealthCritical
+		} else if div.LocalAhead > 0 {
+			level = gitpkg.HealthWarn
+		}
+		issues = append(issues, healthIssue{
+			Level: level,
+			Code:  "base_diverged",
+			Title: fmt.Sprintf("Base %q divergiu de %s", snap.Base, div.RemoteRef),
+			Detail: fmt.Sprintf(
+				"local ↑%d · remoto ↑%d · merge-base %s",
+				div.LocalAhead, div.RemoteAhead, shortHash(div.MergeBase),
+			),
+		})
+
+		for _, analysis := range div.LocalAnalyses {
+			if analysis.LikelyDiscardable {
+				issues = append(issues, healthIssue{
+					Level: gitpkg.HealthWarn,
+					Code:  "build_artifacts",
+					Title: fmt.Sprintf("Commit %s parece conter artefatos de build", analysis.Hash),
+					Detail: fmt.Sprintf(
+						"%s — %d arquivo(s), %d artefato(s) de build",
+						analysis.Subject, analysis.FileCount, analysis.BuildArtifactFiles,
+					),
+				})
+			}
+		}
+	}
+
+	if snap.OnBase && snap.CommitsAheadOfBase == 0 && !snap.IsDirty && snap.Ahead == 0 && snap.Behind == 0 {
+		if snap.BaseDivergence == nil {
+			// healthy base — no issue
+		}
+	}
+
+	if snap.OnBase && snap.CommitsAheadOfBase > 0 && !snap.IsDirty {
+		hasLocalDivergence := snap.BaseDivergence != nil && snap.BaseDivergence.LocalAhead > 0
+		if !hasLocalDivergence {
+			issues = append(issues, healthIssue{
+				Level:  gitpkg.HealthWarn,
+				Code:   "commits_on_base",
+				Title:  fmt.Sprintf("Commits diretos na base %q", snap.Base),
+				Detail: fmt.Sprintf("%d commit(s) à frente da base remota — prefira feature branches", snap.CommitsAheadOfBase),
+			})
+		}
+	}
+
+	return issues
+}
+
+func buildHealthRecommendations(snap *gitpkg.HealthSnapshot, issues []healthIssue) []string {
+	if snap == nil {
+		return nil
+	}
+
+	var recs []string
+	seen := map[string]bool{}
+	add := func(s string) {
+		if s == "" || seen[s] {
+			return
+		}
+		seen[s] = true
+		recs = append(recs, s)
+	}
+
+	for _, issue := range issues {
+		switch issue.Code {
+		case "dirty_tree":
+			add("gitai commit")
+			add("git stash push -m \"wip\"")
+		case "behind_remote":
+			if !snap.IsDirty {
+				add("gitai sync")
+			}
+		case "base_diverged":
+			if snap.BaseDivergence != nil {
+				div := snap.BaseDivergence
+				allDiscardable := div.LocalAhead > 0 && len(div.LocalAnalyses) > 0
+				for _, a := range div.LocalAnalyses {
+					if !a.LikelyDiscardable {
+						allDiscardable = false
+						break
+					}
+				}
+				if allDiscardable && !snap.IsDirty {
+					add(fmt.Sprintf("git fetch origin && git reset --hard origin/%s  # descarta commits locais de build", snap.Base))
+				} else if div.LocalAhead > 0 && div.RemoteAhead > 0 {
+					add(fmt.Sprintf("git fetch origin && git rebase origin/%s  # se os commits locais têm valor", snap.Base))
+					add(fmt.Sprintf("git fetch origin && git reset --hard origin/%s  # se os commits locais são descartáveis", snap.Base))
+				} else if div.LocalAhead > 0 {
+					add(fmt.Sprintf("git push origin %s  # se os commits locais devem ir ao remoto", snap.Base))
+				} else if div.RemoteAhead > 0 {
+					add("gitai sync")
+				}
+			}
+		case "branch_diverged":
+			add("git fetch origin")
+			add("git rebase @{u}  # ou git merge @{u}")
+		case "commits_on_base":
+			add("git checkout -b feature/minha-alteracao")
+		}
+	}
+
+	if len(recs) == 0 && !snap.IsDirty {
+		add("Continuar desenvolvimento — repositório saudável")
+	}
+
+	return recs
+}
+
+func overallHealth(issues []healthIssue, snap *gitpkg.HealthSnapshot) gitpkg.HealthLevel {
+	level := gitpkg.HealthOK
+	for _, issue := range issues {
+		if issue.Level == gitpkg.HealthCritical {
+			return gitpkg.HealthCritical
+		}
+		if issue.Level == gitpkg.HealthWarn {
+			level = gitpkg.HealthWarn
+		}
+	}
+	if snap != nil && snap.IsDirty {
+		level = gitpkg.HealthWarn
+	}
+	return level
+}
+
+func formatHealthFacts(
+	snap *gitpkg.HealthSnapshot,
+	openPR *prpkg.PRView,
+	issues []healthIssue,
+	recommendations []string,
+) string {
+	var b strings.Builder
+	if snap == nil {
+		return ""
+	}
+
+	fmt.Fprintf(&b, "Branch: %s\n", snap.Branch)
+	fmt.Fprintf(&b, "Base: %s (on_base=%v)\n", snap.Base, snap.OnBase)
+	fmt.Fprintf(&b, "Working tree: dirty=%v staged=%d modified=%d untracked=%d\n",
+		snap.IsDirty, snap.Staged, snap.Modified, snap.Untracked)
+	fmt.Fprintf(&b, "Upstream sync: ahead=%d behind=%d diverged=%v\n", snap.Ahead, snap.Behind, snap.Diverged)
+	fmt.Fprintf(&b, "Commits ahead of base: %d\n", snap.CommitsAheadOfBase)
+
+	if openPR != nil {
+		fmt.Fprintf(&b, "Open PR: #%d %s (%s)\n", openPR.Number, openPR.Title, openPR.State)
+	}
+
+	appendDivergenceFacts(&b, "Base divergence", snap.BaseDivergence)
+	appendDivergenceFacts(&b, "Branch divergence", snap.BranchDivergence)
+
+	if len(issues) > 0 {
+		b.WriteString("\nIssues:\n")
+		for _, issue := range issues {
+			fmt.Fprintf(&b, "- [%s] %s: %s\n", issue.Level, issue.Title, issue.Detail)
+		}
+	}
+
+	if len(recommendations) > 0 {
+		b.WriteString("\nRecommendations:\n")
+		for _, rec := range recommendations {
+			fmt.Fprintf(&b, "- %s\n", rec)
+		}
+	}
+
+	return b.String()
+}
+
+func appendDivergenceFacts(b *strings.Builder, label string, div *gitpkg.DivergenceReport) {
+	if div == nil {
+		return
+	}
+	fmt.Fprintf(b, "\n%s (%s vs %s):\n", label, div.LocalRef, div.RemoteRef)
+	fmt.Fprintf(b, "  merge-base: %s\n", shortHash(div.MergeBase))
+	fmt.Fprintf(b, "  local ahead: %d, remote ahead: %d\n", div.LocalAhead, div.RemoteAhead)
+	for _, c := range div.LocalCommits {
+		fmt.Fprintf(b, "  local commit: %s\n", c)
+	}
+	for _, c := range div.RemoteCommits {
+		fmt.Fprintf(b, "  remote commit: %s\n", c)
+	}
+	for _, a := range div.LocalAnalyses {
+		fmt.Fprintf(b, "  analysis %s: files=%d build=%d discardable=%v — %s\n",
+			a.Hash, a.FileCount, a.BuildArtifactFiles, a.LikelyDiscardable, a.Subject)
+	}
+	if div.LocalDiffStat != "" {
+		b.WriteString("  diff --stat (local only):\n")
+		for _, line := range strings.Split(div.LocalDiffStat, "\n") {
+			fmt.Fprintf(b, "    %s\n", line)
+		}
+	}
+}
+
+func formatDoctorLines(
+	snap *gitpkg.HealthSnapshot,
+	openPR *prpkg.PRView,
+	issues []healthIssue,
+	recommendations []string,
+	overall gitpkg.HealthLevel,
+	aiExplanation *ai.HealthExplanation,
+) []string {
+	var lines []string
+
+	lines = append(lines, "Panorama de saúde")
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("  Status geral: %s", healthLevelLabel(overall)))
+
+	if snap != nil {
+		lines = append(lines, fmt.Sprintf("  Branch: %s → base %s", snap.Branch, snap.Base))
+		if snap.IsDirty {
+			lines = append(lines, fmt.Sprintf("  Working tree: %d staged · %d modified · %d untracked",
+				snap.Staged, snap.Modified, snap.Untracked))
+		} else {
+			lines = append(lines, "  Working tree: limpa")
+		}
+
+		switch {
+		case snap.Diverged:
+			lines = append(lines, fmt.Sprintf("  Sync upstream: divergiu (↑%d · ↓%d)", snap.Ahead, snap.Behind))
+		case snap.Ahead > 0 && snap.Behind > 0:
+			lines = append(lines, fmt.Sprintf("  Sync upstream: divergiu (↑%d · ↓%d)", snap.Ahead, snap.Behind))
+		case snap.Ahead > 0:
+			lines = append(lines, fmt.Sprintf("  Sync upstream: ↑ %d à frente do remoto", snap.Ahead))
+		case snap.Behind > 0:
+			lines = append(lines, fmt.Sprintf("  Sync upstream: ↓ %d atrás do remoto", snap.Behind))
+		default:
+			lines = append(lines, "  Sync upstream: em dia")
+		}
+
+		if !snap.OnBase && snap.CommitsAheadOfBase > 0 {
+			lines = append(lines, fmt.Sprintf("  Desenvolvimento: %d commit(s) à frente de %s", snap.CommitsAheadOfBase, snap.Base))
+		}
+	}
+
+	if openPR != nil {
+		state := strings.ToLower(openPR.State)
+		if openPR.IsDraft {
+			state = "draft"
+		}
+		lines = append(lines, fmt.Sprintf("  Pull request: #%d %s (%s)", openPR.Number, openPR.Title, state))
+	}
+
+	if len(issues) > 0 {
+		lines = append(lines, "", "Achados")
+		for _, issue := range issues {
+			prefix := "  •"
+			switch issue.Level {
+			case gitpkg.HealthCritical:
+				prefix = "  ✗"
+			case gitpkg.HealthWarn:
+				prefix = "  !"
+			}
+			lines = append(lines, fmt.Sprintf("%s %s", prefix, issue.Title))
+			if issue.Detail != "" {
+				lines = append(lines, "      "+issue.Detail)
+			}
+		}
+	} else {
+		lines = append(lines, "", "Achados", "  ✓ Nenhum problema detectado")
+	}
+
+	appendDivergenceLines(&lines, snap)
+
+	if len(recommendations) > 0 {
+		lines = append(lines, "", "Recomendações")
+		for _, rec := range recommendations {
+			lines = append(lines, "  → "+rec)
+		}
+	}
+
+	if aiExplanation != nil {
+		lines = append(lines, "", "Análise IA")
+		if aiExplanation.Summary != "" {
+			lines = append(lines, "  "+aiExplanation.Summary)
+		}
+		if aiExplanation.Cause != "" {
+			lines = append(lines, "  Causa: "+aiExplanation.Cause)
+		}
+		if aiExplanation.Risk != "" {
+			lines = append(lines, "  Risco: "+aiExplanation.Risk)
+		}
+		if len(aiExplanation.Steps) > 0 {
+			lines = append(lines, "", "  Passos sugeridos:")
+			for _, step := range aiExplanation.Steps {
+				lines = append(lines, "    → "+step)
+			}
+		}
+		if len(aiExplanation.Warnings) > 0 {
+			lines = append(lines, "", "  Alertas:")
+			for _, w := range aiExplanation.Warnings {
+				lines = append(lines, "    ⚠ "+w)
+			}
+		}
+	}
+
+	return lines
+}
+
+func appendDivergenceLines(lines *[]string, snap *gitpkg.HealthSnapshot) {
+	if snap == nil {
+		return
+	}
+	div := snap.BaseDivergence
+	if div == nil {
+		div = snap.BranchDivergence
+	}
+	if div == nil || (div.LocalAhead == 0 && div.RemoteAhead == 0) {
+		return
+	}
+
+	*lines = append(*lines, "", "Divergência")
+	*lines = append(*lines, fmt.Sprintf("  %s vs %s (ancestral %s)", div.LocalRef, div.RemoteRef, shortHash(div.MergeBase)))
+	if div.LocalAhead > 0 {
+		*lines = append(*lines, fmt.Sprintf("  Local: %d commit(s) exclusivo(s)", div.LocalAhead))
+		for _, c := range div.LocalCommits {
+			*lines = append(*lines, "      "+c)
+		}
+	}
+	if div.RemoteAhead > 0 {
+		*lines = append(*lines, fmt.Sprintf("  Remoto: %d commit(s) exclusivo(s)", div.RemoteAhead))
+		for _, c := range div.RemoteCommits {
+			*lines = append(*lines, "      "+c)
+		}
+	}
+}
+
+func healthLevelLabel(level gitpkg.HealthLevel) string {
+	switch level {
+	case gitpkg.HealthCritical:
+		return "crítico — ação necessária"
+	case gitpkg.HealthWarn:
+		return "atenção — revisar recomendações"
+	default:
+		return "saudável"
+	}
+}
+
+func shortHash(hash string) string {
+	hash = strings.TrimSpace(hash)
+	if len(hash) > 8 {
+		return hash[:8]
+	}
+	return hash
+}
+
+// FormatDoctorContent retorna o relatório como texto único (TUI).
+func FormatDoctorContent(report *DoctorReport) string {
+	if report == nil {
+		return ""
+	}
+	return strings.Join(report.Lines, "\n")
+}

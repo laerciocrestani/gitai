@@ -12,5 +12,6 @@ const (
 	ScreenSync
 	ScreenAction
 	ScreenReport
+	ScreenDoctor
 	ScreenHelp
 )

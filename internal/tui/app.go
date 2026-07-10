@@ -48,6 +48,7 @@ type appModel struct {
 	sync           syncModel
 	add            addModel
 	report         reportModel
+	doctor         doctorModel
 	action         *actionState
 	refresh        refreshConfig
 	refreshPending bool
@@ -65,6 +66,7 @@ func newApp(cfg refreshConfig) appModel {
 		sync:     newSyncModel(),
 		add:      newAddModel(),
 		report:   newReportModel(),
+		doctor:   newDoctorModel(),
 		refresh:  cfg,
 	}
 }
@@ -179,6 +181,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen == ScreenReport {
 			m.report.SetSize(m.width, m.height)
 		}
+		if m.screen == ScreenDoctor {
+			m.doctor.SetSize(m.width, m.height)
+		}
 		if m.action != nil {
 			m.action.resizeEditors(m.width, m.height)
 		}
@@ -280,6 +285,18 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case doctorLoadedMsg:
+		m.doctor.Load(msg)
+		m.doctor.SetSize(m.width, m.height)
+		if msg.err != nil {
+			m.status = msg.err.Error()
+		} else if msg.explain {
+			m.status = "Health · AI"
+		} else {
+			m.status = "Health"
+		}
+		return m, nil
+
 	case actionPreviewMsg:
 		if m.action != nil {
 			m.action.handlePreview(msg)
@@ -327,6 +344,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateActionMsg(msg)
 		case ScreenReport:
 			return m.updateReport(msg)
+		case ScreenDoctor:
+			return m.updateDoctor(msg)
 		case ScreenHelp:
 			return m.updateHelp(msg)
 		}
@@ -367,6 +386,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.screen == ScreenReport {
 		var cmd tea.Cmd
 		m.report, cmd = m.report.Update(msg)
+		return m, cmd
+	}
+
+	if m.screen == ScreenDoctor {
+		var cmd tea.Cmd
+		m.doctor, cmd = m.doctor.Update(msg)
 		return m, cmd
 	}
 
@@ -474,6 +499,10 @@ func (m appModel) updateDashboard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = ScreenReport
 			m.status = "AI usage"
 			return m, loadReportCmd(m.report.period)
+		case dashKeyDoctor:
+			m.screen = ScreenDoctor
+			m.status = "Health"
+			return m, loadDoctorCmd(false)
 		case dashKeyHelp:
 			m.screen = ScreenHelp
 			m.status = "Help"
@@ -613,6 +642,24 @@ func (m appModel) updateBranches(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.branches, cmd = m.branches.Update(msg)
+	return m, cmd
+}
+
+func (m appModel) updateDoctor(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.screen = ScreenDashboard
+		m.status = "Ready"
+		return m, nil
+	case "r":
+		return m, loadDoctorCmd(m.doctor.explain)
+	case "e":
+		if !m.doctor.explain {
+			return m, loadDoctorCmd(true)
+		}
+	}
+	var cmd tea.Cmd
+	m.doctor, cmd = m.doctor.Update(msg)
 	return m, cmd
 }
 
@@ -780,6 +827,9 @@ func (m appModel) View() string {
 	case ScreenReport:
 		b.WriteString(m.report.View(m.loadTick))
 		help = reportHelpLine()
+	case ScreenDoctor:
+		b.WriteString(m.doctor.View(m.loadTick))
+		help = doctorHelpLine(m.doctor.explain)
 	case ScreenHelp:
 		b.WriteString("\n")
 		b.WriteString(helpContent())

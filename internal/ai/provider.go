@@ -20,6 +20,7 @@ type CommitSuggestion struct {
 type Provider interface {
 	SuggestCommit(ctx context.Context, diff, diffStat, lang string) (*CommitSuggestion, error)
 	SuggestPR(ctx context.Context, diff, branch, base, lang, commitLog string) (*PRSuggestion, error)
+	ExplainHealth(ctx context.Context, facts, lang string) (*HealthExplanation, error)
 	UsageStats() UsageSummary
 }
 

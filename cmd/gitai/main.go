@@ -26,6 +26,7 @@ var (
 	reportDays          int
 	reportMonth         bool
 	reportAll           bool
+	doctorExplain       bool
 )
 
 func main() {
@@ -240,7 +241,16 @@ func main() {
 		},
 	}
 
-	root.AddCommand(installCmd, updateCmd, syncCmd, versionCmd, statusCmd, commitCmd, pushCmd, prCmd, configCmd, pricingCmd, reportCmd, uiCmd)
+	doctorCmd := &cobra.Command{
+		Use:   "doctor",
+		Short: "Panorama de saúde do repositório",
+		Long:  "Analisa divergências, working tree e recomenda próximos passos. Use --explain para enriquecer com IA.",
+		RunE:  runDoctor,
+	}
+	doctorCmd.Flags().BoolVar(&doctorExplain, "explain", false, "consulta IA para explicação detalhada")
+	doctorCmd.Flags().StringVar(&base, "base", "", "branch base (default: config base_branch)")
+
+	root.AddCommand(installCmd, updateCmd, syncCmd, versionCmd, statusCmd, commitCmd, pushCmd, prCmd, configCmd, pricingCmd, reportCmd, uiCmd, doctorCmd)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -296,6 +306,18 @@ func runReport(cmd *cobra.Command, args []string) error {
 		Month: reportMonth,
 		All:   reportAll,
 	})
+}
+
+func runDoctor(cmd *cobra.Command, args []string) error {
+	report, err := app.RunDoctor(cmd.Context(), app.DoctorOptions{
+		Explain: doctorExplain,
+		Base:    base,
+	})
+	if err != nil {
+		return err
+	}
+	app.PrintDoctor(report, nil)
+	return nil
 }
 
 func isConfigCommand(cmd *cobra.Command) bool {

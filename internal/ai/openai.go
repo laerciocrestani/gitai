@@ -84,6 +84,10 @@ func (c *openAIClient) SuggestPR(ctx context.Context, diff, branch, base, lang, 
 	return suggestPRWithRetry(ctx, diff, branch, base, lang, commitLog, c.cfg.MaxDiffBytes, c.chat)
 }
 
+func (c *openAIClient) ExplainHealth(ctx context.Context, facts, lang string) (*HealthExplanation, error) {
+	return explainHealthWithRetry(ctx, facts, lang, c.chat)
+}
+
 func (c *openAIClient) chat(ctx context.Context, prompt, label string) (string, error) {
 	return withModelFallback(ctx, c.cfg, c.cfg.Model, func(model string) (string, error) {
 		return callWithRetry(ctx, c.providerName(), func() (string, error) {

@@ -21,6 +21,7 @@ const (
 	dashKeyCopyHash
 	dashKeyLogs
 	dashKeyReport
+	dashKeyDoctor
 	dashKeyHelp
 )
 
@@ -40,6 +41,8 @@ func parseDashboardKey(msg tea.KeyMsg, snap *app.WorkspaceSnapshot) (dashKey, bo
 		return dashKeyHelp, true
 	case "u":
 		return dashKeyReport, true
+	case "h":
+		return dashKeyDoctor, true
 	case "c":
 		if snap != nil && snap.Overview != nil && snap.Overview.IsDirty() && snap.ConfigErr == nil {
 			return dashKeyCommit, true

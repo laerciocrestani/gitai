@@ -36,4 +36,6 @@ var stepWeights = map[string]int{
 	"Fetching origin":             35,
 	"Finding branches to prune":   20,
 	"Refreshing origin":           15,
+	"Analyzing repository health": 45,
+	"Consulting AI":               40,
 }

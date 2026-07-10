@@ -85,6 +85,10 @@ func (c *geminiClient) SuggestPR(ctx context.Context, diff, branch, base, lang, 
 	return suggestPRWithRetry(ctx, diff, branch, base, lang, commitLog, c.cfg.MaxDiffBytes, c.generate)
 }
 
+func (c *geminiClient) ExplainHealth(ctx context.Context, facts, lang string) (*HealthExplanation, error) {
+	return explainHealthWithRetry(ctx, facts, lang, c.generate)
+}
+
 func (c *geminiClient) generate(ctx context.Context, prompt, label string) (string, error) {
 	return withModelFallback(ctx, c.cfg, c.cfg.Model, func(model string) (string, error) {
 		return callWithRetry(ctx, "Gemini", func() (string, error) {

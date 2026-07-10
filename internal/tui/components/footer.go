@@ -62,6 +62,7 @@ func DefaultFooterItems(snap *app.WorkspaceSnapshot) []FooterItem {
 		{Key: "b", Label: "Branches", Enabled: snap != nil && snap.Overview != nil && len(snap.Overview.Branches) > 0},
 		{Key: "y", Label: "Copy hash", Enabled: snap != nil && snap.Overview != nil && snap.Overview.HeadHash != ""},
 		{Key: "l", Label: "Logs", Enabled: len(snapSafeCommits(snap)) > 0},
+		{Key: "h", Label: "Doctor", Enabled: true},
 		{Key: "?", Label: "Help", Enabled: true},
 		{Key: "q", Label: "Quit", Enabled: true},
 	}

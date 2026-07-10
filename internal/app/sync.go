@@ -81,6 +81,7 @@ func RunSync(opts SyncOptions) error {
 		}
 		return repo.PullBase(base)
 	}); err != nil {
+		DiagnoseSyncFailure(base, err, prog)
 		return err
 	}
 
