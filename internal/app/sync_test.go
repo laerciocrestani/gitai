@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
 )
 
 type recordedProgress struct {

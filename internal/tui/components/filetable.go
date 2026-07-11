@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/tui/theme"
-	"github.com/laerciocrestani/gitai/internal/ui"
-	"github.com/laerciocrestani/gitai/internal/uiprefs"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/tui/theme"
+	"github.com/laerciocrestani/openbench/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/uiprefs"
 )
 
 const (

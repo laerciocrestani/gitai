@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/pricing"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/pricing"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 func RunPricingUpdate() error {
@@ -41,7 +41,7 @@ func RunPricingShow() error {
 		return err
 	}
 	if store == nil || len(store.Models) == 0 {
-		sess.Info("Nenhum preço salvo. Execute: gitai pricing update")
+		sess.Info("Nenhum preço salvo. Execute: ob pricing update")
 		return nil
 	}
 

@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/laerciocrestani/gitai/internal/pricing"
-	"github.com/laerciocrestani/gitai/internal/usage"
+	"github.com/laerciocrestani/openbench/internal/pricing"
+	"github.com/laerciocrestani/openbench/internal/usage"
 )
 
 // UsageReportSnapshot agrega dados formatados para a TUI de report.
@@ -60,7 +60,7 @@ func formatReportLines(report *usage.Report, period usage.Period, opts ReportOpt
 		lines = append(lines, fmt.Sprintf("Preços atualizados: %s",
 			store.UpdatedAt.Format("2006-01-02 15:04 UTC")))
 	} else {
-		lines = append(lines, "Preços não encontrados — execute: gitai pricing update")
+		lines = append(lines, "Preços não encontrados — execute: ob pricing update")
 	}
 	lines = append(lines, "")
 

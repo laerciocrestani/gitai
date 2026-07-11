@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
-	"github.com/laerciocrestani/gitai/internal/app"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
+	"github.com/laerciocrestani/openbench/internal/app"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
 )
 
 func TestSnapshotChanged_nil(t *testing.T) {

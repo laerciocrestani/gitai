@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Wrapper de compatibilidade — prefira install.sh na raiz do repositório.
+# Wrapper — prefira install.sh na raiz do repositório.
 #
-#   curl -fsSL https://raw.githubusercontent.com/laerciocrestani/gitai/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/laerciocrestani/openbench/main/install.sh | bash
 #   ./install.sh
-#   gitai update
+#   ob update
 
 set -euo pipefail
 
@@ -12,13 +12,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 usage() {
   cat <<'EOF'
-gitai-setup — wrapper de compatibilidade
+openbench setup
 
 Prefira:
-  ./install.sh                 Instalação completa (Go + gitai + PATH + config)
-  ./uninstall.sh               Remove gitai, config e PATH do instalador
-  gitai config                 Wizard de configuração
-  gitai update                 git pull + reinstala
+  ./install.sh                 Instalação completa (Go + ob + PATH + config)
+  ./uninstall.sh               Remove openbench, config e PATH do instalador
+  ob config                    Wizard de configuração
+  ob update                    git pull + reinstala
 
 Este script ainda aceita:
   ./scripts/setup.sh install   → ./install.sh
@@ -28,20 +28,24 @@ Este script ainda aceita:
 EOF
 }
 
-run_gitai() {
-  if command -v gitai >/dev/null 2>&1; then
-    gitai "$@"
+run_ob() {
+  if command -v ob >/dev/null 2>&1; then
+    ob "$@"
     return
   fi
-  if [[ -x "${HOME}/go/bin/gitai" ]]; then
-    "${HOME}/go/bin/gitai" "$@"
+  if command -v openbench >/dev/null 2>&1; then
+    openbench "$@"
+    return
+  fi
+  if [[ -x "${HOME}/go/bin/openbench" ]]; then
+    "${HOME}/go/bin/openbench" "$@"
     return
   fi
   if ! command -v go >/dev/null 2>&1; then
     echo "✗ Go não encontrado. Rode: ./install.sh" >&2
     exit 1
   fi
-  (cd "$REPO_ROOT" && go run ./cmd/gitai "$@")
+  (cd "$REPO_ROOT" && go run ./cmd/ob "$@")
 }
 
 main() {
@@ -49,8 +53,8 @@ main() {
   case "$cmd" in
     install)   exec "$REPO_ROOT/install.sh" "${@:2}" ;;
     uninstall) exec "$REPO_ROOT/uninstall.sh" "${@:2}" ;;
-    config)    run_gitai config ;;
-    update)  run_gitai update ;;
+    config)    run_ob config ;;
+    update)    run_ob update ;;
     help|-h|--help) usage ;;
     *) echo "✗ Comando desconhecido: $cmd" >&2; usage >&2; exit 1 ;;
   esac

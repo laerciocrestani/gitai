@@ -9,7 +9,7 @@ import (
 func TestIsValidRepoRoot(t *testing.T) {
 	root, err := FindRepoRoot()
 	if err != nil {
-		t.Skip("not in gitai repo")
+		t.Skip("not in openbench repo")
 	}
 	if !isValidRepoRoot(root) {
 		t.Fatalf("expected valid root: %s", root)
@@ -22,7 +22,7 @@ func TestIsValidRepoRoot(t *testing.T) {
 func TestSaveAndReadSourceRoot(t *testing.T) {
 	root, err := FindRepoRoot()
 	if err != nil {
-		t.Skip("not in gitai repo")
+		t.Skip("not in openbench repo")
 	}
 
 	path, err := sourceRootFile()

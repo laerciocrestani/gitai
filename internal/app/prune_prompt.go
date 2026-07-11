@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/ui"
 	"golang.org/x/term"
 )
 

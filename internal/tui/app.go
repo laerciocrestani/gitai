@@ -7,10 +7,10 @@ import (
 
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/laerciocrestani/gitai/internal/app"
-	"github.com/laerciocrestani/gitai/internal/tui/components"
-	"github.com/laerciocrestani/gitai/internal/tui/views"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/app"
+	"github.com/laerciocrestani/openbench/internal/tui/components"
+	"github.com/laerciocrestani/openbench/internal/tui/views"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 type snapshotMsg struct {
@@ -49,6 +49,7 @@ type appModel struct {
 	add            addModel
 	report         reportModel
 	doctor         doctorModel
+	dockerLogs     dockerLogsModel
 	action         *actionState
 	refresh        refreshConfig
 	refreshPending bool
@@ -65,8 +66,9 @@ func newApp(cfg refreshConfig) appModel {
 		branches: newBranchesModel(),
 		sync:     newSyncModel(),
 		add:      newAddModel(),
-		report:   newReportModel(),
-		doctor:   newDoctorModel(),
+		report:     newReportModel(),
+		doctor:     newDoctorModel(),
+		dockerLogs: newDockerLogsModel(),
 		refresh:  cfg,
 	}
 }
@@ -297,6 +299,25 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case dockerLogsLoadedMsg:
+		m.dockerLogs.Load(msg)
+		m.dockerLogs.SetSize(m.width, m.height)
+		if msg.err != nil {
+			m.status = msg.err.Error()
+		} else {
+			m.status = "Docker logs"
+		}
+		return m, nil
+
+	case dockerActionMsg:
+		if msg.err != nil {
+			m.status = msg.err.Error()
+		} else {
+			m.status = "Docker " + msg.action + " complete"
+		}
+		m.loading = true
+		return m, loadSnapshotCmd(m.loadProg)
+
 	case actionPreviewMsg:
 		if m.action != nil {
 			m.action.handlePreview(msg)
@@ -346,6 +367,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateReport(msg)
 		case ScreenDoctor:
 			return m.updateDoctor(msg)
+		case ScreenDockerLogs:
+			return m.updateDockerLogs(msg)
 		case ScreenHelp:
 			return m.updateHelp(msg)
 		}
@@ -392,6 +415,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.screen == ScreenDoctor {
 		var cmd tea.Cmd
 		m.doctor, cmd = m.doctor.Update(msg)
+		return m, cmd
+	}
+
+	if m.screen == ScreenDockerLogs {
+		var cmd tea.Cmd
+		m.dockerLogs, cmd = m.dockerLogs.Update(msg)
 		return m, cmd
 	}
 
@@ -503,6 +532,19 @@ func (m appModel) updateDashboard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = ScreenDoctor
 			m.status = "Health"
 			return m, loadDoctorCmd(false)
+		case dashKeyDockerUp:
+			m.status = "Docker up…"
+			return m, runDockerUpCmd()
+		case dashKeyDockerDown:
+			m.status = "Docker down…"
+			return m, runDockerDownCmd()
+		case dashKeyDockerLogs:
+			m.screen = ScreenDockerLogs
+			m.status = "Docker logs"
+			return m, loadDockerLogsCmd(m.snapshot)
+		case dashKeyDockerShell:
+			m.status = "Docker shell…"
+			return m, runDockerShellCmd(m.snapshot)
 		case dashKeyHelp:
 			m.screen = ScreenHelp
 			m.status = "Help"
@@ -660,6 +702,20 @@ func (m appModel) updateDoctor(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.doctor, cmd = m.doctor.Update(msg)
+	return m, cmd
+}
+
+func (m appModel) updateDockerLogs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.screen = ScreenDashboard
+		m.status = "Ready"
+		return m, nil
+	case "r":
+		return m, loadDockerLogsCmd(m.snapshot)
+	}
+	var cmd tea.Cmd
+	m.dockerLogs, cmd = m.dockerLogs.Update(msg)
 	return m, cmd
 }
 
@@ -830,6 +886,9 @@ func (m appModel) View() string {
 	case ScreenDoctor:
 		b.WriteString(m.doctor.View(m.loadTick))
 		help = doctorHelpLine(m.doctor.explain)
+	case ScreenDockerLogs:
+		b.WriteString(m.dockerLogs.View(m.loadTick))
+		help = dockerLogsHelpLine()
 	case ScreenHelp:
 		b.WriteString("\n")
 		b.WriteString(helpContent())

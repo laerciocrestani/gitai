@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/laerciocrestani/gitai/internal/app"
-	"github.com/laerciocrestani/gitai/internal/config"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/setup"
-	"github.com/laerciocrestani/gitai/internal/tui"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/app"
+	"github.com/laerciocrestani/openbench/internal/config"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/setup"
+	"github.com/laerciocrestani/openbench/internal/tui"
+	"github.com/laerciocrestani/openbench/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -27,18 +27,24 @@ var (
 	reportMonth         bool
 	reportAll           bool
 	doctorExplain       bool
+	dockerBuild         bool
+	dockerProfile       string
+	dockerAll           bool
+	dockerTail          int
+	dockerFollow        bool
+	dockerComposeFile   string
 )
 
 func main() {
 	root := &cobra.Command{
-		Use:   "gitai",
-		Short: "CLI para commit/PR com IA barata",
-		Long:  "Gera conventional commits a partir de git diff usando IA configurável e integra com gh pr create.",
+		Use:   "ob",
+		Short: "Dev environment orchestrator with AI-powered git workflow",
+		Long:  "openbench (ob) — Docker, conventional commits com IA e integração com GitHub CLI.",
 		RunE:  runOverview,
 		Args:  cobra.NoArgs,
 	}
 
-	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "simula sem executar git/gh")
+	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "simula sem executar git/gh/docker")
 	root.PersistentFlags().BoolVar(&verbose, "verbose", false, "exibe detalhes da sugestão da IA")
 	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if skipClearScreen(cmd) {
@@ -117,7 +123,7 @@ func main() {
 	updateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "Atualiza o repositório e reinstala o binário",
-		Long:  "Executa git pull e go install dentro do clone do repositório gitai.",
+		Long:  "Executa git pull e go install dentro do clone do repositório openbench.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return setup.Update()
 		},
@@ -235,7 +241,7 @@ func main() {
 	uiCmd := &cobra.Command{
 		Use:   "ui",
 		Short: "Interface interativa no terminal (TUI)",
-		Long:  "Abre o dashboard fullscreen com branches, arquivos alterados e próximos passos.",
+		Long:  "Abre o dashboard fullscreen com ambiente Docker, git e próximos passos.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return tui.Run()
 		},
@@ -243,17 +249,98 @@ func main() {
 
 	doctorCmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Panorama de saúde do repositório",
-		Long:  "Analisa divergências, working tree e recomenda próximos passos. Use --explain para enriquecer com IA.",
+		Short: "Panorama de saúde do repositório e ambiente",
+		Long:  "Analisa divergências, working tree, Docker e recomenda próximos passos. Use --explain para enriquecer com IA.",
 		RunE:  runDoctor,
 	}
 	doctorCmd.Flags().BoolVar(&doctorExplain, "explain", false, "consulta IA para explicação detalhada")
 	doctorCmd.Flags().StringVar(&base, "base", "", "branch base (default: config base_branch)")
 
-	root.AddCommand(installCmd, updateCmd, syncCmd, versionCmd, statusCmd, commitCmd, pushCmd, prCmd, configCmd, pricingCmd, reportCmd, uiCmd, doctorCmd)
+	dockerCmd := &cobra.Command{
+		Use:   "docker",
+		Short: "Controle Docker Compose do projeto",
+	}
+
+	dockerStatusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Exibe status do Docker e containers do compose",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.RunDockerStatus()
+		},
+	}
+
+	dockerPSCmd := &cobra.Command{
+		Use:   "ps",
+		Short: "Lista containers do compose",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.RunDockerPS(dockerOpts())
+		},
+	}
+	dockerPSCmd.Flags().BoolVar(&dockerAll, "all", false, "inclui containers parados")
+
+	dockerUpCmd := &cobra.Command{
+		Use:   "up",
+		Short: "Sobe serviços com docker compose up -d",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.RunDockerUp(dockerOpts())
+		},
+	}
+	dockerUpCmd.Flags().BoolVar(&dockerBuild, "build", false, "reconstrói imagens antes de subir")
+	dockerUpCmd.Flags().StringVar(&dockerProfile, "profile", "", "profile do compose")
+
+	dockerDownCmd := &cobra.Command{
+		Use:   "down",
+		Short: "Para serviços com docker compose down",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.RunDockerDown(dockerOpts())
+		},
+	}
+
+	dockerLogsCmd := &cobra.Command{
+		Use:   "logs [service]",
+		Short: "Exibe logs de um serviço",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts := dockerOpts()
+			if len(args) > 0 {
+				opts.Service = args[0]
+			}
+			return app.RunDockerLogs(opts)
+		},
+	}
+	dockerLogsCmd.Flags().IntVar(&dockerTail, "tail", 100, "número de linhas")
+	dockerLogsCmd.Flags().BoolVarP(&dockerFollow, "follow", "f", false, "segue logs em tempo real")
+
+	dockerShCmd := &cobra.Command{
+		Use:   "sh [service]",
+		Short: "Abre shell interativo no serviço",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts := dockerOpts()
+			if len(args) > 0 {
+				opts.Service = args[0]
+			}
+			return app.RunDockerShell(opts)
+		},
+	}
+
+	dockerCmd.PersistentFlags().StringVarP(&dockerComposeFile, "file", "f", "", "caminho do compose file")
+	dockerCmd.AddCommand(dockerStatusCmd, dockerPSCmd, dockerUpCmd, dockerDownCmd, dockerLogsCmd, dockerShCmd)
+
+	root.AddCommand(installCmd, updateCmd, syncCmd, versionCmd, statusCmd, commitCmd, pushCmd, prCmd, configCmd, pricingCmd, reportCmd, uiCmd, doctorCmd, dockerCmd)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
+	}
+}
+
+func dockerOpts() app.DockerOptions {
+	return app.DockerOptions{
+		ComposeFile: dockerComposeFile,
+		Build:       dockerBuild,
+		Profile:     dockerProfile,
+		All:         dockerAll,
+		Tail:        dockerTail,
+		Follow:      dockerFollow,
+		DryRun:      dryRun,
 	}
 }
 

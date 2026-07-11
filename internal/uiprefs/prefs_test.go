@@ -8,7 +8,7 @@ import (
 )
 
 func TestInteractiveUIEnabled_default(t *testing.T) {
-	t.Setenv("GITAI_NO_UI", "")
+	t.Setenv("OB_NO_UI", "")
 	t.Setenv("CI", "")
 
 	dir := t.TempDir()
@@ -17,7 +17,7 @@ func TestInteractiveUIEnabled_default(t *testing.T) {
 	if err := os.WriteFile(path, []byte("provider: openrouter\napi_key: test-key\nmodel: m\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GITAI_CONFIG", path)
+	t.Setenv("OB_CONFIG", path)
 
 	if !InteractiveUIEnabled() {
 		t.Fatal("expected interactive UI by default")
@@ -25,7 +25,7 @@ func TestInteractiveUIEnabled_default(t *testing.T) {
 }
 
 func TestInteractiveUIEnabled_configOff(t *testing.T) {
-	t.Setenv("GITAI_NO_UI", "")
+	t.Setenv("OB_NO_UI", "")
 	t.Setenv("CI", "")
 
 	dir := t.TempDir()
@@ -35,7 +35,7 @@ func TestInteractiveUIEnabled_configOff(t *testing.T) {
 	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GITAI_CONFIG", path)
+	t.Setenv("OB_CONFIG", path)
 
 	if InteractiveUIEnabled() {
 		t.Fatal("expected interactive UI disabled from config")
@@ -43,11 +43,11 @@ func TestInteractiveUIEnabled_configOff(t *testing.T) {
 }
 
 func TestInteractiveUIEnabled_envOverride(t *testing.T) {
-	t.Setenv("GITAI_NO_UI", "1")
+	t.Setenv("OB_NO_UI", "1")
 	t.Setenv("CI", "")
 
 	if InteractiveUIEnabled() {
-		t.Fatal("expected GITAI_NO_UI to disable TUI")
+		t.Fatal("expected OB_NO_UI to disable TUI")
 	}
 }
 
@@ -60,7 +60,7 @@ func TestColorsEnabled_default(t *testing.T) {
 	if err := os.WriteFile(path, []byte("provider: openrouter\napi_key: test-key\nmodel: m\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GITAI_CONFIG", path)
+	t.Setenv("OB_CONFIG", path)
 
 	if !ColorsEnabled() {
 		t.Fatal("expected colors enabled by default")
@@ -77,7 +77,7 @@ func TestColorsEnabled_configOff(t *testing.T) {
 	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GITAI_CONFIG", path)
+	t.Setenv("OB_CONFIG", path)
 
 	if ColorsEnabled() {
 		t.Fatal("expected colors disabled from config")
@@ -99,7 +99,7 @@ func TestAutoRefreshInterval_default(t *testing.T) {
 	if err := os.WriteFile(path, []byte("provider: openrouter\napi_key: test-key\nmodel: m\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GITAI_CONFIG", path)
+	t.Setenv("OB_CONFIG", path)
 
 	if got := AutoRefreshInterval(); got != 5*time.Second {
 		t.Fatalf("expected 5s default, got %v", got)
@@ -114,7 +114,7 @@ func TestAutoRefreshInterval_configOff(t *testing.T) {
 	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GITAI_CONFIG", path)
+	t.Setenv("OB_CONFIG", path)
 
 	if got := AutoRefreshInterval(); got != 0 {
 		t.Fatalf("expected polling disabled, got %v", got)
@@ -129,7 +129,7 @@ func TestWatchFilesEnabled_configOff(t *testing.T) {
 	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GITAI_CONFIG", path)
+	t.Setenv("OB_CONFIG", path)
 
 	if WatchFilesEnabled() {
 		t.Fatal("expected file watcher disabled from config")

@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/ai"
-	"github.com/laerciocrestani/gitai/internal/config"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/ai"
+	"github.com/laerciocrestani/openbench/internal/config"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 // ChangeSummary aggregates working tree change statistics.
@@ -61,6 +61,9 @@ func BuildHeaderContext(snap *WorkspaceSnapshot) ui.HeaderContext {
 	if snap.ConfigErr == nil && snap.Config != nil {
 		ctx.Provider = string(snap.Config.Provider)
 		ctx.Model = snap.Config.Model
+	}
+	if snap.Docker != nil {
+		ctx.Docker = snap.Docker.SummaryLine()
 	}
 	return ctx
 }
@@ -216,18 +219,22 @@ type mappedAction struct {
 
 func mapStepToAction(command string) mappedAction {
 	switch command {
-	case "gitai commit":
+	case "ob commit":
 		return mappedAction{Key: "c", Label: "Commit"}
-	case "gitai push":
+	case "ob push":
 		return mappedAction{Key: "p", Label: "Push"}
-	case "gitai pr":
+	case "ob pr":
 		return mappedAction{Key: "P", Label: "PR"}
-	case "gitai sync":
+	case "ob sync":
 		return mappedAction{Key: "s", Label: "Sync"}
-	case "gitai config":
+	case "ob config":
 		return mappedAction{Key: "?", Label: "Config"}
-	case "gitai pr view":
+	case "ob pr view":
 		return mappedAction{Key: "o", Label: "Open PR"}
+	case "ob docker up":
+		return mappedAction{Key: "U", Label: "Docker up"}
+	case "ob docker status":
+		return mappedAction{Key: "U", Label: "Docker status"}
 	default:
 		return mappedAction{}
 	}

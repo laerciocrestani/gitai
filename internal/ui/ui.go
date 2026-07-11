@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/laerciocrestani/gitai/internal/uiprefs"
+	"github.com/laerciocrestani/openbench/internal/uiprefs"
 )
 
 const dividerWidth = 42

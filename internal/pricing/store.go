@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/laerciocrestani/openbench/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,11 +26,11 @@ type Store struct {
 }
 
 func StorePath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := config.DataDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "gitai", "pricing.yaml"), nil
+	return filepath.Join(dir, "pricing.yaml"), nil
 }
 
 func Load() (*Store, error) {

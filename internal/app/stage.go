@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
 )
 
 // CanAdd reports whether there are unstaged files that can be added to the index.

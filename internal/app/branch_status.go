@@ -3,8 +3,8 @@ package app
 import (
 	"strings"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	prpkg "github.com/laerciocrestani/gitai/internal/pr"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	prpkg "github.com/laerciocrestani/openbench/internal/pr"
 )
 
 // ResolveBranchStage picks the primary lifecycle badge for a branch.

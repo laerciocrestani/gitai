@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/app"
-	"github.com/laerciocrestani/gitai/internal/tui/theme"
+	"github.com/laerciocrestani/openbench/internal/app"
+	"github.com/laerciocrestani/openbench/internal/tui/theme"
 )
 
 // RenderAIPanel renders the AI engine status panel.

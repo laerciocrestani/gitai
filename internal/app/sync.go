@@ -3,9 +3,9 @@ package app
 import (
 	"fmt"
 
-	"github.com/laerciocrestani/gitai/internal/config"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/config"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 type SyncOptions struct {

@@ -1,8 +1,8 @@
 package app
 
 import (
-	prpkg "github.com/laerciocrestani/gitai/internal/pr"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	prpkg "github.com/laerciocrestani/openbench/internal/pr"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 func RunPRView() error {

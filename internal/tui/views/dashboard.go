@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/app"
-	"github.com/laerciocrestani/gitai/internal/tui/components"
+	"github.com/laerciocrestani/openbench/internal/app"
+	"github.com/laerciocrestani/openbench/internal/tui/components"
 )
 
 // DashboardOptions configures dashboard rendering.
@@ -28,6 +28,8 @@ func RenderDashboard(snap *app.WorkspaceSnapshot, opts DashboardOptions) string 
 
 	o := snap.Overview
 	var b strings.Builder
+
+	b.WriteString(components.RenderEnvironmentPanel(snap, width))
 
 	b.WriteString(components.RenderOpenPR(snap.OpenPR, width))
 
@@ -58,6 +60,11 @@ func RenderDashboard(snap *app.WorkspaceSnapshot, opts DashboardOptions) string 
 
 	if !snap.HasGH {
 		b.WriteString(components.RenderPanel("Note", "install gh for PR info — https://cli.github.com/", width))
+	}
+	if snap.Docker != nil {
+		if note := app.FormatDockerNote(snap.Docker); note != "" && !strings.Contains(note, "ob docker up") {
+			b.WriteString(components.RenderPanel("Note", note, width))
+		}
 	}
 
 	return b.String()

@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 
-	"github.com/laerciocrestani/gitai/internal/ai"
+	"github.com/laerciocrestani/openbench/internal/ai"
 )
 
 func withAINotices(ctx context.Context, prog Progress) context.Context {

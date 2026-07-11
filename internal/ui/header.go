@@ -7,18 +7,19 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// HeaderContext holds repository and AI status for the dashboard header.
+// HeaderContext holds repository, Docker and AI status for the dashboard header.
 type HeaderContext struct {
-	Repo     string
-	Branch   string
+	Repo         string
+	Branch       string
 	HeadHash     string
 	HeadFullHash string
-	Status   string
-	Sync     string
-	Provider string
-	Model    string
-	AIReady  bool
-	OnBase   bool
+	Status       string
+	Sync         string
+	Docker       string
+	Provider     string
+	Model        string
+	AIReady      bool
+	OnBase       bool
 }
 
 // BannerContext is an alias kept for backward compatibility during migration.
@@ -42,9 +43,9 @@ func FormatDashboardHeader(ctx *HeaderContext, width int, dryRun bool, colorsEna
 	style := headerBoxStyle(colorsEnabled)
 	inner := ContentInner(width)
 	var lines []string
-	lines = append(lines, RenderBoxTop("GITAI", width, style))
+	lines = append(lines, RenderBoxTop("OPENBENCH", width, style))
 
-	tagline := paint("AI Git Workflow", dim)
+	tagline := paint("Dev Environment Orchestrator", dim)
 	version := Version()
 	if dryRun {
 		version += " · dry-run"
@@ -55,6 +56,7 @@ func FormatDashboardHeader(ctx *HeaderContext, width int, dryRun bool, colorsEna
 	if ctx != nil {
 		lines = append(lines, RenderBoxLine(headerMetaRow("Repository", ctx.Repo, ctx.Status, inner, paint), width))
 		lines = append(lines, RenderBoxLine(headerMetaRow("Branch", ctx.Branch, ctx.Sync, inner, paint), width))
+		lines = append(lines, RenderBoxLine(headerMetaRow("Docker", dockerHeaderValue(ctx.Docker), dockerHeaderStatus(ctx.Docker), inner, paint), width))
 
 		aiLabel := formatProviderModel(ctx.Provider, ctx.Model)
 		aiStatus := aiStatusLabel(ctx.AIReady)
@@ -77,7 +79,7 @@ func FormatDashboardHeader(ctx *HeaderContext, width int, dryRun bool, colorsEna
 		commitValue := formatCommitValue(ctx.HeadHash, ctx.HeadFullHash, paint)
 		lines = append(lines, RenderBoxLine(headerMetaRow("Commit", commitValue, commitNote, inner, paint), width))
 	} else {
-		fallback := "AI Git Workflow · " + Version()
+		fallback := "Dev Environment Orchestrator · " + Version()
 		if dryRun {
 			fallback += " · dry-run"
 		}
@@ -181,6 +183,35 @@ func shortHashFromFull(full string) string {
 		return full
 	}
 	return full[:7]
+}
+
+func dockerHeaderValue(status string) string {
+	switch status {
+	case "ok":
+		return "daemon"
+	case "stopped":
+		return "compose"
+	case "off":
+		return "daemon"
+	default:
+		return "engine"
+	}
+}
+
+func dockerHeaderStatus(status string) string {
+	switch status {
+	case "ok":
+		return "running"
+	case "stopped":
+		return "stopped"
+	case "off":
+		return "offline"
+	default:
+		if status == "" {
+			return "n/a"
+		}
+		return status
+	}
 }
 
 func truncateRunewidth(s string, max int) string {

@@ -6,9 +6,9 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/laerciocrestani/gitai/internal/app"
-	"github.com/laerciocrestani/gitai/internal/config"
-	prpkg "github.com/laerciocrestani/gitai/internal/pr"
+	"github.com/laerciocrestani/openbench/internal/app"
+	"github.com/laerciocrestani/openbench/internal/config"
+	prpkg "github.com/laerciocrestani/openbench/internal/pr"
 )
 
 type editFocus int

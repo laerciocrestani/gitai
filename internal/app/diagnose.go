@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/ai"
-	"github.com/laerciocrestani/gitai/internal/config"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	prpkg "github.com/laerciocrestani/gitai/internal/pr"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/ai"
+	"github.com/laerciocrestani/openbench/internal/config"
+	dockerpkg "github.com/laerciocrestani/openbench/internal/docker"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	prpkg "github.com/laerciocrestani/openbench/internal/pr"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 // DoctorOptions controla a execução do doctor.
@@ -84,17 +85,29 @@ func RunDoctor(ctx context.Context, opts DoctorOptions) (*DoctorReport, error) {
 
 	issues := analyzeHealthIssues(snap)
 	recommendations := buildHealthRecommendations(snap, issues)
+
+	var dockerOverview *dockerpkg.Overview
+	if err := prog.Step("Checking Docker environment", func() error {
+		dockerOverview = dockerpkg.LoadOverview("")
+		dockerIssues, dockerRecs := analyzeDockerHealth(dockerOverview)
+		issues = append(issues, dockerIssues...)
+		recommendations = appendUniqueRecommendations(recommendations, dockerRecs)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
 	overall := overallHealth(issues, snap)
 
 	report := &DoctorReport{
 		Overall: overall,
-		Facts:   formatHealthFacts(snap, openPR, issues, recommendations),
+		Facts:   formatHealthFacts(snap, openPR, dockerOverview, issues, recommendations),
 		Lines:   formatDoctorLines(snap, openPR, issues, recommendations, overall, nil),
 	}
 
 	if opts.Explain {
 		if cfg == nil || cfg.APIKey == "" {
-			return report, fmt.Errorf("API key não configurada — use gitai config ou GITAI_API_KEY para --explain")
+			return report, fmt.Errorf("API key não configurada — use ob config ou OB_API_KEY para --explain")
 		}
 
 		var provider ai.Provider
@@ -199,7 +212,7 @@ func DiagnoseSyncFailure(base string, syncErr error, prog Progress) {
 			prog.Info(line)
 		}
 	}
-	prog.Info("Para panorama completo: gitai doctor")
+		prog.Info("Para panorama completo: ob doctor")
 }
 
 func isFastForwardError(err error) bool {
@@ -319,11 +332,11 @@ func buildHealthRecommendations(snap *gitpkg.HealthSnapshot, issues []healthIssu
 	for _, issue := range issues {
 		switch issue.Code {
 		case "dirty_tree":
-			add("gitai commit")
+			add("ob commit")
 			add("git stash push -m \"wip\"")
 		case "behind_remote":
 			if !snap.IsDirty {
-				add("gitai sync")
+				add("ob sync")
 			}
 		case "base_diverged":
 			if snap.BaseDivergence != nil {
@@ -343,7 +356,7 @@ func buildHealthRecommendations(snap *gitpkg.HealthSnapshot, issues []healthIssu
 				} else if div.LocalAhead > 0 {
 					add(fmt.Sprintf("git push origin %s  # se os commits locais devem ir ao remoto", snap.Base))
 				} else if div.RemoteAhead > 0 {
-					add("gitai sync")
+					add("ob sync")
 				}
 			}
 		case "branch_diverged":
@@ -380,6 +393,7 @@ func overallHealth(issues []healthIssue, snap *gitpkg.HealthSnapshot) gitpkg.Hea
 func formatHealthFacts(
 	snap *gitpkg.HealthSnapshot,
 	openPR *prpkg.PRView,
+	dockerOverview *dockerpkg.Overview,
 	issues []healthIssue,
 	recommendations []string,
 ) string {
@@ -397,6 +411,18 @@ func formatHealthFacts(
 
 	if openPR != nil {
 		fmt.Fprintf(&b, "Open PR: #%d %s (%s)\n", openPR.Number, openPR.Title, openPR.State)
+	}
+
+	if dockerOverview != nil {
+		fmt.Fprintf(&b, "\nDocker: available=%v daemon=%v compose=%q\n",
+			dockerOverview.Available, dockerOverview.DaemonRunning, dockerOverview.ComposeFile)
+		for _, c := range dockerOverview.Containers {
+			fmt.Fprintf(&b, "  container %s: state=%s ports=%s health=%s\n",
+				c.Service, c.State, c.Ports, c.Health)
+		}
+		if dockerOverview.Error != "" {
+			fmt.Fprintf(&b, "  docker error: %s\n", dockerOverview.Error)
+		}
 	}
 
 	appendDivergenceFacts(&b, "Base divergence", snap.BaseDivergence)
@@ -594,6 +620,62 @@ func shortHash(hash string) string {
 		return hash[:8]
 	}
 	return hash
+}
+
+func analyzeDockerHealth(ov *dockerpkg.Overview) ([]healthIssue, []string) {
+	if ov == nil {
+		return nil, nil
+	}
+	var issues []healthIssue
+	var recs []string
+
+	if !ov.Available {
+		issues = append(issues, healthIssue{
+			Level:  gitpkg.HealthWarn,
+			Code:   "docker_missing",
+			Title:  "Docker CLI não encontrado",
+			Detail: "instale Docker para subir o ambiente local",
+		})
+		return issues, recs
+	}
+	if !ov.DaemonRunning {
+		issues = append(issues, healthIssue{
+			Level:  gitpkg.HealthWarn,
+			Code:   "docker_daemon",
+			Title:  "Docker daemon parado",
+			Detail: "inicie o Docker Desktop ou o serviço docker",
+		})
+		recs = append(recs, "ob docker status")
+		return issues, recs
+	}
+	if ov.ComposeFile == "" {
+		return issues, recs
+	}
+	if !dockerpkg.HasRunningContainers(ov.Containers) {
+		issues = append(issues, healthIssue{
+			Level:  gitpkg.HealthWarn,
+			Code:   "docker_stopped",
+			Title:  "Compose detectado, containers parados",
+			Detail: ov.ComposeFile,
+		})
+		recs = append(recs, "ob docker up")
+	}
+	return issues, recs
+}
+
+func appendUniqueRecommendations(base, extra []string) []string {
+	seen := map[string]bool{}
+	for _, s := range base {
+		seen[s] = true
+	}
+	for _, s := range extra {
+		if s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+		base = append(base, s)
+	}
+	return base
 }
 
 // FormatDoctorContent retorna o relatório como texto único (TUI).

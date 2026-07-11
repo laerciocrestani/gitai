@@ -1,5 +1,6 @@
 # Binaries
-/gitai
+/ob
+/openbench
 /bin/
 *.exe
 *.exe~
@@ -24,7 +25,7 @@ go.work.sum
 *~
 
 # Local config
-.gitai.yaml
+.openbench.yaml
 .env
 .env.*
 

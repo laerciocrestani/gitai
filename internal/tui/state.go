@@ -13,5 +13,6 @@ const (
 	ScreenAction
 	ScreenReport
 	ScreenDoctor
+	ScreenDockerLogs
 	ScreenHelp
 )

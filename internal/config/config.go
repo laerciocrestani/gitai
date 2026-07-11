@@ -1,17 +1,12 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
-)
-
-const (
-	EnvAPIKey = "GITAI_API_KEY"
 )
 
 type Provider string
@@ -23,30 +18,30 @@ const (
 )
 
 type Config struct {
-	Provider         Provider `yaml:"provider"`
-	APIKey           string   `yaml:"api_key"`
-	Model            string   `yaml:"model"`
-	FallbackModel    string   `yaml:"fallback_model,omitempty"`
-	Language         string   `yaml:"language"`
-	BaseBranch       string   `yaml:"base_branch"`
-	CoAuthor         string   `yaml:"co_author"`
-	MaxDiffBytes     int      `yaml:"max_diff_bytes"`
-	InputPricePer1M  float64  `yaml:"input_price_per_1m,omitempty"`
-	OutputPricePer1M float64  `yaml:"output_price_per_1m,omitempty"`
-	ClearScreen      bool     `yaml:"clear_screen,omitempty"`
-	InteractiveUI        bool `yaml:"interactive_ui,omitempty"`
-	UIColor              bool `yaml:"ui_color,omitempty"`
-	UIAutoRefreshSeconds int  `yaml:"ui_auto_refresh_seconds,omitempty"`
-	UIWatchFiles         bool `yaml:"ui_watch_files,omitempty"`
+	Provider             Provider `yaml:"provider"`
+	APIKey               string   `yaml:"api_key"`
+	Model                string   `yaml:"model"`
+	FallbackModel        string   `yaml:"fallback_model,omitempty"`
+	Language             string   `yaml:"language"`
+	BaseBranch           string   `yaml:"base_branch"`
+	CoAuthor             string   `yaml:"co_author"`
+	MaxDiffBytes         int      `yaml:"max_diff_bytes"`
+	InputPricePer1M      float64  `yaml:"input_price_per_1m,omitempty"`
+	OutputPricePer1M     float64  `yaml:"output_price_per_1m,omitempty"`
+	ClearScreen          bool     `yaml:"clear_screen,omitempty"`
+	InteractiveUI        bool     `yaml:"interactive_ui,omitempty"`
+	UIColor              bool     `yaml:"ui_color,omitempty"`
+	UIAutoRefreshSeconds int      `yaml:"ui_auto_refresh_seconds,omitempty"`
+	UIWatchFiles         bool     `yaml:"ui_watch_files,omitempty"`
 }
 
 func Default() Config {
 	return Config{
-		Provider:      ProviderOpenRouter,
-		Model:         "deepseek/deepseek-chat",
-		Language:      "pt-BR",
-		BaseBranch:    "main",
-		MaxDiffBytes:  120000,
+		Provider:             ProviderOpenRouter,
+		Model:                "deepseek/deepseek-chat",
+		Language:             "pt-BR",
+		BaseBranch:           "main",
+		MaxDiffBytes:         120000,
 		InteractiveUI:        true,
 		UIColor:              true,
 		UIAutoRefreshSeconds: 5,
@@ -54,31 +49,11 @@ func Default() Config {
 	}
 }
 
-func ConfigPath() (string, error) {
-	if env := os.Getenv("GITAI_CONFIG"); env != "" {
-		return env, nil
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "gitai", "config.yaml"), nil
-}
-
-func LocalConfigPath() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(wd, ".gitai.yaml")
-}
-
 func Load() (*Config, error) {
 	cfg := Default()
 
 	localPath := LocalConfigPath()
-	if _, err := os.Stat(localPath); err == nil {
+	if fileExists(localPath) {
 		if err := loadFile(localPath, &cfg); err != nil {
 			return nil, fmt.Errorf("carregar %s: %w", localPath, err)
 		}
@@ -87,18 +62,15 @@ func Load() (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := os.Stat(path); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return nil, fmt.Errorf("config não encontrada. Execute: gitai config init")
-			}
-			return nil, err
+		if !fileExists(path) {
+			return nil, fmt.Errorf("config não encontrada. Execute: ob config init")
 		}
 		if err := loadFile(path, &cfg); err != nil {
 			return nil, fmt.Errorf("carregar %s: %w", path, err)
 		}
 	}
 
-	if envKey := os.Getenv(EnvAPIKey); envKey != "" {
+	if envKey := APIKeyFromEnv(); envKey != "" {
 		cfg.APIKey = envKey
 	}
 
@@ -109,12 +81,12 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// LoadExisting lê a config salva sem exigir api_key (para o wizard e preferências).
+// LoadExisting reads saved config without requiring api_key (wizard and preferences).
 func LoadExisting() (*Config, string, error) {
 	cfg := Default()
 
 	localPath := LocalConfigPath()
-	if _, err := os.Stat(localPath); err == nil {
+	if fileExists(localPath) {
 		if err := loadFile(localPath, &cfg); err != nil {
 			return nil, "", fmt.Errorf("carregar %s: %w", localPath, err)
 		}
@@ -126,11 +98,8 @@ func LoadExisting() (*Config, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	if _, err := os.Stat(path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return &cfg, path, nil
-		}
-		return nil, "", err
+	if !fileExists(path) {
+		return &cfg, path, nil
 	}
 	if err := loadFile(path, &cfg); err != nil {
 		return nil, "", fmt.Errorf("carregar %s: %w", path, err)
@@ -139,9 +108,9 @@ func LoadExisting() (*Config, string, error) {
 	return &cfg, path, nil
 }
 
-// ClearScreenEnabled indica se o terminal deve ser limpo antes de cada comando.
+// ClearScreenEnabled reports whether the terminal should be cleared before each command.
 func ClearScreenEnabled() bool {
-	if os.Getenv("GITAI_NO_CLEAR") != "" {
+	if NoClearFromEnv() {
 		return false
 	}
 	cfg, _, err := LoadExisting()
@@ -161,6 +130,14 @@ func (c *Config) normalize() {
 	if c.MaxDiffBytes <= 0 {
 		c.MaxDiffBytes = 120000
 	}
+}
+
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func loadFile(path string, cfg *Config) error {
@@ -234,4 +211,16 @@ func (c Config) Display() string {
 func isValidGeminiAPIKey(key string) bool {
 	key = strings.TrimSpace(key)
 	return strings.HasPrefix(key, "AIza") || strings.HasPrefix(key, "AQ.")
+}
+
+// EnsureDataDir creates ~/.config/openbench if needed.
+func EnsureDataDir() (string, error) {
+	dir, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return dir, nil
 }

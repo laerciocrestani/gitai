@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/config"
-	"github.com/laerciocrestani/gitai/internal/pricing"
+	"github.com/laerciocrestani/openbench/internal/config"
+	"github.com/laerciocrestani/openbench/internal/pricing"
 )
 
 type CostEstimate struct {

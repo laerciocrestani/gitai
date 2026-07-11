@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 func InitInteractive() error {
@@ -176,7 +176,7 @@ func InitInteractive() error {
 		interactiveDefault = "Não"
 	}
 	interactiveChoice, err := wiz.Select(reader, ui.SelectConfig{
-		Label:      "Interface interativa ao rodar gitai",
+		Label:      "Interface interativa ao rodar ob",
 		Options:    []string{"Sim", "Não"},
 		Default:    interactiveDefault,
 		AllowOther: false,

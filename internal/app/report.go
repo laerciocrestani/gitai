@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/laerciocrestani/gitai/internal/pricing"
-	"github.com/laerciocrestani/gitai/internal/ui"
-	"github.com/laerciocrestani/gitai/internal/usage"
+	"github.com/laerciocrestani/openbench/internal/pricing"
+	"github.com/laerciocrestani/openbench/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/usage"
 )
 
 type ReportOptions struct {
@@ -43,7 +43,7 @@ func RunReport(opts ReportOptions) error {
 		sess.Detail(fmt.Sprintf("Preços: atualizados em %s",
 			store.UpdatedAt.Format("2006-01-02 15:04 UTC")))
 	} else {
-		sess.Info("Preços não encontrados. Execute: gitai pricing update")
+		sess.Info("Preços não encontrados. Execute: ob pricing update")
 	}
 
 	ledgerPath, _ := usage.LedgerPath()

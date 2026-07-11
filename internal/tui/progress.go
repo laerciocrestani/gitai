@@ -3,7 +3,7 @@ package tui
 import (
 	"sync"
 
-	"github.com/laerciocrestani/gitai/internal/app"
+	"github.com/laerciocrestani/openbench/internal/app"
 )
 
 const maxProgressBeforeDone = 99

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# gitai uninstall — remove binário, dados em ~/.config/gitai e entradas de PATH.
+# openbench uninstall — remove binário, dados em ~/.config/openbench e entradas de PATH.
 #
 # Uso:
 #   ./uninstall.sh
-#   curl -fsSL https://raw.githubusercontent.com/laerciocrestani/gitai/main/uninstall.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/laerciocrestani/openbench/main/uninstall.sh | bash
 #
 # Opções:
 #   -y, --yes       Não pede confirmação
@@ -14,15 +14,15 @@
 #
 set -euo pipefail
 
-readonly GITAI_CONFIG_DIR="${GITAI_CONFIG_DIR:-${HOME}/.config/gitai}"
+readonly OB_CONFIG_DIR="${OB_CONFIG_DIR:-${HOME}/.config/openbench}"
 readonly GO_SDK_DIR="${GO_SDK_DIR:-${HOME}/sdk/go}"
-readonly PATH_MARKER_INSTALLER="# gitai installer"
-readonly PATH_MARKER_GOBIN="# gitai (Go bin)"
-readonly GO_SDK_MARKER="${GITAI_CONFIG_DIR}/.go-sdk-installed"
+readonly PATH_MARKER_INSTALLER="# openbench installer"
+readonly PATH_MARKER_GOBIN="# openbench (Go bin)"
+readonly ALIAS_MARKER="# openbench alias (ob)"
+readonly GO_SDK_MARKER="${OB_CONFIG_DIR}/.go-sdk-installed"
 
 ASSUME_YES=0
 REMOVE_GO=""
-# REMOVE_GO: "" = auto (remove if marker), "1" = force remove, "0" = keep
 
 log()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
@@ -31,23 +31,23 @@ die()  { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'EOF'
-gitai uninstall
+openbench uninstall
 
 Remove do sistema, nesta ordem:
   1. Confirmação (a menos que use -y)
-  2. Binário gitai em $(go env GOPATH)/bin
+  2. Binário ob em $(go env GOPATH)/bin
   3. Go em ~/sdk/go (somente se instalado pelo install.sh, ou com --remove-go)
-  4. Diretório ~/.config/gitai (config, clone, usage, pricing, etc.)
+  4. Diretório ~/.config/openbench (config, clone, usage, pricing, etc.)
   5. Blocos de PATH no ~/.zshrc ou ~/.bashrc
 
 Não remove:
-  - Arquivos .gitai.yaml em projetos
-  - Variáveis GITAI_* exportadas manualmente em outros arquivos
+  - Arquivos .openbench.yaml em projetos
+  - Variáveis OB_* exportadas manualmente em outros arquivos
   - Go instalado por outros meios (exceto com --remove-go)
 
 Uso:
   ./uninstall.sh
-  curl -fsSL https://raw.githubusercontent.com/laerciocrestani/gitai/main/uninstall.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/laerciocrestani/openbench/main/uninstall.sh | bash
 
 Opções:
   -y, --yes       Confirma sem perguntar
@@ -89,9 +89,9 @@ confirm_uninstall() {
     return 0
   fi
   echo ""
-  warn "Isso vai remover o gitai deste computador:"
-  echo "  • binário gitai"
-  echo "  • ${GITAI_CONFIG_DIR}/ (config, clone, usage, pricing…)"
+  warn "Isso vai remover o openbench deste computador:"
+  echo "  • binário ob"
+  echo "  • ${OB_CONFIG_DIR}/ (config, clone, usage, pricing…)"
   echo "  • entradas de PATH adicionadas pelo instalador"
   if should_remove_go; then
     echo "  • Go em ${GO_SDK_DIR} (instalado pelo install.sh)"
@@ -131,8 +131,9 @@ strip_path_blocks() {
   local tmp
   tmp="$(mktemp)"
   awk '
-    /^# gitai installer$/ { skip=2; next }
-    /^# gitai \(Go bin\)$/ { skip=1; next }
+    /^# openbench installer$/ { skip=2; next }
+    /^# openbench \(Go bin\)$/ { skip=1; next }
+    /^# openbench alias \(ob\)$/ { skip=1; next }
     skip > 0 { skip--; next }
     { print }
   ' "$rc" >"$tmp"
@@ -147,26 +148,29 @@ strip_path_blocks() {
 
 step_remove_binary() {
   log "1/4 Removendo binário"
-  local bin_dir binary removed=0
+  local bin_dir removed=0
   bin_dir="$(gopath_bin_dir)"
-  binary="${bin_dir}/gitai"
 
-  if [[ -f "$binary" ]]; then
-    rm -f "$binary"
-    ok "Removido ${binary}"
-    removed=1
-  fi
-
-  if command -v gitai >/dev/null 2>&1; then
-    local other
-    other="$(command -v gitai)"
-    if [[ "$other" != "$binary" ]] && [[ -f "$other" ]]; then
-      warn "Outro binário encontrado: ${other} (não removido automaticamente)"
+  for binary in "${bin_dir}/openbench" "${bin_dir}/ob"; do
+    if [[ -f "$binary" ]]; then
+      rm -f "$binary"
+      ok "Removido ${binary}"
+      removed=1
     fi
-  fi
+  done
+
+  for cmd in openbench ob; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+      local other
+      other="$(command -v "$cmd")"
+      if [[ "$other" != "${bin_dir}/openbench" && "$other" != "${bin_dir}/ob" ]] && [[ -f "$other" ]]; then
+        warn "Outro binário encontrado: ${other} (não removido automaticamente)"
+      fi
+    fi
+  done
 
   if [[ "$removed" -eq 0 ]]; then
-    warn "Binário não encontrado em ${binary}"
+    warn "Binário não encontrado em ${bin_dir}/openbench"
   fi
 }
 
@@ -190,12 +194,12 @@ step_remove_go_sdk() {
 }
 
 step_remove_config() {
-  log "3/4 Removendo dados em ${GITAI_CONFIG_DIR}"
-  if [[ -d "$GITAI_CONFIG_DIR" ]]; then
-    rm -rf "$GITAI_CONFIG_DIR"
+  log "3/4 Removendo dados em ${OB_CONFIG_DIR}"
+  if [[ -d "$OB_CONFIG_DIR" ]]; then
+    rm -rf "$OB_CONFIG_DIR"
     ok "Diretório removido"
   else
-    warn "Nada em ${GITAI_CONFIG_DIR}"
+    warn "Nada em ${OB_CONFIG_DIR}"
   fi
 }
 
@@ -203,31 +207,33 @@ step_clean_shell_path() {
   log "4/4 Limpando PATH no shell"
   local found=0
   while IFS= read -r rc; do
-    if grep -qF "$PATH_MARKER_INSTALLER" "$rc" 2>/dev/null || grep -qF "$PATH_MARKER_GOBIN" "$rc" 2>/dev/null; then
+    if grep -qF "$PATH_MARKER_INSTALLER" "$rc" 2>/dev/null \
+      || grep -qF "$PATH_MARKER_GOBIN" "$rc" 2>/dev/null \
+      || grep -qF "$ALIAS_MARKER" "$rc" 2>/dev/null; then
       strip_path_blocks "$rc"
       found=1
     fi
   done < <(shell_rc_files)
 
   if [[ "$found" -eq 0 ]]; then
-    ok "Nenhum bloco gitai no shell rc"
+    ok "Nenhum bloco openbench no shell rc"
   fi
 }
 
 finish() {
   echo ""
-  ok "gitai removido deste computador."
+  ok "openbench removido deste computador."
   echo ""
   warn "Abra um novo terminal ou rode: source ~/.zshrc"
   echo ""
-  echo "  Para reinstalar: curl -fsSL https://raw.githubusercontent.com/laerciocrestani/gitai/main/install.sh | bash"
+  echo "  Para reinstalar: curl -fsSL https://raw.githubusercontent.com/laerciocrestani/openbench/main/install.sh | bash"
   echo ""
 }
 
 main() {
   parse_args "$@"
   echo ""
-  echo "  gitai uninstall"
+  echo "  openbench uninstall"
   echo "  ─────────────────────────────────────"
   confirm_uninstall
   echo ""

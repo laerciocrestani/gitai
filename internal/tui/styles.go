@@ -2,7 +2,7 @@ package tui
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/laerciocrestani/gitai/internal/tui/theme"
+	"github.com/laerciocrestani/openbench/internal/tui/theme"
 )
 
 var (

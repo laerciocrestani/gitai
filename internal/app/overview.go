@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	prpkg "github.com/laerciocrestani/gitai/internal/pr"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	prpkg "github.com/laerciocrestani/openbench/internal/pr"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 func RunOverview() error {

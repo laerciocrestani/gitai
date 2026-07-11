@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/laerciocrestani/gitai/internal/config"
+	"github.com/laerciocrestani/openbench/internal/config"
 )
 
 type openAIClient struct {
@@ -117,8 +117,8 @@ func (c *openAIClient) chatOnce(ctx context.Context, prompt, label, model string
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
 	if c.cfg.Provider == config.ProviderOpenRouter {
-		req.Header.Set("HTTP-Referer", "https://github.com/laerciocrestani/gitai")
-		req.Header.Set("X-Title", "gitai")
+		req.Header.Set("HTTP-Referer", "https://github.com/laerciocrestani/openbench")
+		req.Header.Set("X-Title", "openbench")
 	}
 
 	resp, err := c.httpClient.Do(req)

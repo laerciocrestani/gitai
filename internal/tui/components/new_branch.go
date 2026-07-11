@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/tui/theme"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/tui/theme"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 // NewBranchStep identifies the wizard step for creating a branch.

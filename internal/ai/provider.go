@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/config"
+	"github.com/laerciocrestani/openbench/internal/config"
 )
 
 type CommitSuggestion struct {

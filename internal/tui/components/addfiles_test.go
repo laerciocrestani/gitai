@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/tui/components"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/tui/components"
 )
 
 func TestSelectMarker(t *testing.T) {

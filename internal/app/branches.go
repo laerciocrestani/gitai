@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
 )
 
 // ListBranches returns all local branches with tracking info.

@@ -10,10 +10,10 @@ import (
 func TestFormatDashboardHeaderContainsTitleAndVersion(t *testing.T) {
 	out := FormatDashboardHeader(nil, 78, false, false)
 
-	if !strings.Contains(out, "GITAI") {
+	if !strings.Contains(out, "OPENBENCH") {
 		t.Fatalf("header missing title: %q", out)
 	}
-	if !strings.Contains(out, "AI Git Workflow") {
+	if !strings.Contains(out, "Dev Environment Orchestrator") {
 		t.Fatalf("header missing tagline: %q", out)
 	}
 	if !strings.Contains(out, "╭") || !strings.Contains(out, "╰") {
@@ -23,12 +23,13 @@ func TestFormatDashboardHeaderContainsTitleAndVersion(t *testing.T) {
 
 func TestFormatDashboardHeaderContext(t *testing.T) {
 	ctx := &HeaderContext{
-		Repo:         "gitai",
+		Repo:         "openbench",
 		Branch:       "main",
 		HeadHash:     "22843f3",
 		HeadFullHash: "22843f3a1b2c3d4e5f678901234567890abcdef0",
 		Status:       "✓ Clean",
 		Sync:         "✓ in sync",
+		Docker:       "ok",
 		Provider:     "gemini",
 		Model:        "gemini-2.5-flash-lite",
 		AIReady:      true,
@@ -36,7 +37,7 @@ func TestFormatDashboardHeaderContext(t *testing.T) {
 	}
 	out := FormatDashboardHeader(ctx, 100, false, false)
 
-	for _, want := range []string{"gitai", "main", "22843f3", "Full SHA:", "22843f3a1b2c3d4e5f678901234567890abcdef0", "gemini", "gemini-2.5-flash-lite", "Ready", "⧉"} {
+	for _, want := range []string{"openbench", "main", "22843f3", "Full SHA:", "22843f3a1b2c3d4e5f678901234567890abcdef0", "gemini", "gemini-2.5-flash-lite", "Ready", "⧉", "Docker"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("header missing %q: %q", want, out)
 		}
@@ -63,9 +64,9 @@ func TestFormatDashboardHeaderWidth(t *testing.T) {
 }
 
 func TestFormatBannerAlias(t *testing.T) {
-	ctx := HeaderContext{Repo: "gitai", Branch: "main", Status: "clean"}
+	ctx := HeaderContext{Repo: "openbench", Branch: "main", Status: "clean"}
 	out := FormatBanner(false, &ctx, false)
-	if !strings.Contains(out, "gitai") {
+	if !strings.Contains(out, "openbench") {
 		t.Fatalf("FormatBanner alias broken: %q", out)
 	}
 }

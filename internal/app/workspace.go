@@ -1,24 +1,28 @@
 package app
 
 import (
+	"os"
 	"os/exec"
 
-	"github.com/laerciocrestani/gitai/internal/config"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	prpkg "github.com/laerciocrestani/gitai/internal/pr"
+	"github.com/laerciocrestani/openbench/internal/config"
+	dockerpkg "github.com/laerciocrestani/openbench/internal/docker"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	prpkg "github.com/laerciocrestani/openbench/internal/pr"
 )
 
-// WorkspaceSnapshot agrega o estado read-only do repositório para o dashboard TUI.
+// WorkspaceSnapshot agrega o estado read-only do workspace para o dashboard TUI.
 type WorkspaceSnapshot struct {
 	Overview  *gitpkg.Overview
+	Docker    *dockerpkg.Overview
 	OpenPR    *prpkg.PRView
 	Config    *config.Config
 	ConfigErr error
 	NextSteps []NextStep
 	HasGH     bool
+	HasDocker bool
 }
 
-// LoadWorkspaceSnapshot coleta overview, PR aberto, config e próximos passos.
+// LoadWorkspaceSnapshot coleta overview, Docker, PR aberto, config e próximos passos.
 func LoadWorkspaceSnapshot() (*WorkspaceSnapshot, error) {
 	return LoadWorkspaceSnapshotWithProgress(nil)
 }
@@ -26,6 +30,7 @@ func LoadWorkspaceSnapshot() (*WorkspaceSnapshot, error) {
 // LoadWorkspaceSnapshotWithProgress coleta o snapshot reportando etapas ao Progress.
 func LoadWorkspaceSnapshotWithProgress(prog Progress) (*WorkspaceSnapshot, error) {
 	var repo *gitpkg.Repo
+	workDir, _ := os.Getwd()
 
 	step := func(label string, fn func() error) error {
 		if prog == nil {
@@ -68,11 +73,21 @@ func LoadWorkspaceSnapshotWithProgress(prog Progress) (*WorkspaceSnapshot, error
 		return nil, err
 	}
 
+	var dockerOverview *dockerpkg.Overview
+	if err := step("Checking Docker environment", func() error {
+		dockerOverview = dockerpkg.LoadOverview(workDir)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
 	snap := &WorkspaceSnapshot{
 		Overview:  overview,
+		Docker:    dockerOverview,
 		Config:    cfg,
 		ConfigErr: cfgErr,
 		HasGH:     hasGH(),
+		HasDocker: dockerpkg.HasDocker(),
 	}
 
 	if snap.HasGH {
@@ -88,7 +103,7 @@ func LoadWorkspaceSnapshotWithProgress(prog Progress) (*WorkspaceSnapshot, error
 		}
 	}
 
-	snap.NextSteps = buildNextSteps(overview, snap.OpenPR, cfgErr == nil)
+	snap.NextSteps = buildNextSteps(overview, snap.OpenPR, dockerOverview, cfgErr == nil)
 
 	if prog != nil {
 		prog.Success("Ready")

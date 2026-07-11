@@ -1,27 +1,29 @@
 #!/usr/bin/env bash
 #
-# gitai installer — instala Go (se necessário), compila gitai, configura PATH e roda o wizard.
+# openbench installer — instala Go (se necessário), compila ob, configura PATH e roda o wizard.
 #
 # Uso:
 #   ./install.sh
-#   curl -fsSL https://raw.githubusercontent.com/laerciocrestani/gitai/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/laerciocrestani/openbench/main/install.sh | bash
 #
 # Opções:
-#   --no-config    Não executa gitai config ao final
+#   --no-config    Não executa ob config ao final
 #   --skip-go      Falha se Go não estiver instalado (não instala automaticamente)
 #   -h, --help     Ajuda
 #
 set -euo pipefail
 
-readonly GITAI_REPO_URL="${GITAI_REPO_URL:-https://github.com/laerciocrestani/gitai.git}"
-readonly GITAI_INSTALL_DIR="${GITAI_INSTALL_DIR:-${HOME}/.config/gitai/repository}"
+readonly OB_REPO_URL="${OB_REPO_URL:-https://github.com/laerciocrestani/openbench.git}"
+readonly OB_INSTALL_DIR="${OB_INSTALL_DIR:-${HOME}/.config/openbench/repository}"
 readonly GO_VERSION="${GO_VERSION:-1.25.0}"
 readonly GO_MIN_VERSION="${GO_MIN_VERSION:-1.22}"
 readonly GO_SDK_DIR="${GO_SDK_DIR:-${HOME}/sdk/go}"
-readonly PATH_MARKER="# gitai installer"
+readonly PATH_MARKER="# openbench installer"
+readonly ALIAS_MARKER="# openbench alias (ob)"
 
 RUN_CONFIG=1
 SKIP_GO_INSTALL=0
+CREATE_ALIAS=1
 
 log()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
@@ -30,28 +32,30 @@ die()  { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'EOF'
-gitai installer
+openbench installer
 
 Instala, nesta ordem:
   1. Verifica dependências (git, curl)
   2. Instala Go em ~/sdk/go se não houver versão compatível
-  3. Clona ou usa o repositório gitai
-  4. Compila e instala o binário (go run ./cmd/gitai install)
+  3. Clona ou usa o repositório openbench
+  4. Compila e instala o binário (go run ./cmd/ob install)
   5. Adiciona Go e ~/go/bin ao ~/.zshrc ou ~/.bashrc
-  6. Executa gitai config (wizard interativo)
+  6. Opcional: alias ob → openbench no shell
+  7. Executa ob config (wizard interativo)
 
 Uso:
   ./install.sh
-  curl -fsSL https://raw.githubusercontent.com/laerciocrestani/gitai/main/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/laerciocrestani/openbench/main/install.sh | bash
 
 Variáveis:
-  GITAI_REPO_URL      URL do repositório (default: GitHub oficial)
-  GITAI_INSTALL_DIR   Diretório do clone (default: ~/.config/gitai/repository)
+  OB_REPO_URL         URL do repositório (default: GitHub oficial)
+  OB_INSTALL_DIR      Diretório do clone (default: ~/.config/openbench/repository)
   GO_VERSION          Versão do Go a instalar (default: 1.25.0)
   GO_SDK_DIR          Onde extrair o Go (default: ~/sdk/go)
 
 Opções:
-  --no-config         Pula o wizard gitai config
+  --no-config         Pula o wizard ob config
+  --no-alias          Não cria alias ob no shell
   --skip-go           Não instala Go automaticamente
   -h, --help          Esta ajuda
 EOF
@@ -61,6 +65,7 @@ parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --no-config) RUN_CONFIG=0; shift ;;
+      --no-alias)  CREATE_ALIAS=0; shift ;;
       --skip-go)   SKIP_GO_INSTALL=1; shift ;;
       -h|--help)   usage; exit 0 ;;
       *) die "Opção desconhecida: $1 (use --help)" ;;
@@ -142,6 +147,81 @@ append_path_block() {
   warn "Abra um novo terminal ou rode: source ${rc}"
 }
 
+resolve_openbench_bin() {
+  export_paths_for_session
+  if command -v openbench >/dev/null 2>&1; then
+    command -v openbench
+    return 0
+  fi
+  if [[ -x "${HOME}/go/bin/openbench" ]]; then
+    echo "${HOME}/go/bin/openbench"
+    return 0
+  fi
+  if command -v go >/dev/null 2>&1; then
+    local candidate
+    candidate="$(go env GOPATH)/bin/openbench"
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+prompt_ob_alias() {
+  if [[ "$CREATE_ALIAS" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    warn "Terminal não interativo — alias ob não criado (use --no-alias para suprimir)"
+    CREATE_ALIAS=0
+    return 0
+  fi
+
+  echo ""
+  read -r -p "Criar alias 'ob' no shell para chamar openbench? [S/n] " reply
+  case "${reply:-S}" in
+    n|N|no|No|NO)
+      CREATE_ALIAS=0
+      ok "Alias ob não será criado"
+      ;;
+    *)
+      ok "Alias ob será adicionado ao shell"
+      ;;
+  esac
+}
+
+append_ob_alias_block() {
+  [[ "$CREATE_ALIAS" -eq 1 ]] || return 0
+
+  local rc bin
+  rc="$(shell_rc_file)"
+  if [[ -z "$rc" ]]; then
+    warn "Não encontrei ~/.zshrc nem ~/.bashrc — adicione manualmente:"
+    warn "  alias ob='$(resolve_openbench_bin)'"
+    return 0
+  fi
+
+  if ! bin="$(resolve_openbench_bin)"; then
+    warn "openbench não encontrado — alias ob não criado"
+    return 0
+  fi
+
+  if grep -qF "$ALIAS_MARKER" "$rc" 2>/dev/null; then
+    ok "Alias ob já configurado em ${rc}"
+    return 0
+  fi
+
+  {
+    echo ""
+    echo "$ALIAS_MARKER"
+    echo "alias ob='${bin}'"
+  } >>"$rc"
+
+  ok "Alias ob gravado em ${rc}"
+  warn "Após source ${rc}, use: ob --help"
+}
+
 export_paths_for_session() {
   export PATH="${GO_SDK_DIR}/bin:${PATH}"
   if command -v go >/dev/null 2>&1; then
@@ -152,7 +232,7 @@ export_paths_for_session() {
 }
 
 step_preflight() {
-  log "1/6 Verificando dependências"
+  log "1/7 Verificando dependências"
   need_cmd git
   need_cmd curl
   need_cmd tar
@@ -160,7 +240,7 @@ step_preflight() {
 }
 
 step_install_go() {
-  log "2/6 Verificando Go (mínimo ${GO_MIN_VERSION})"
+  log "2/7 Verificando Go (mínimo ${GO_MIN_VERSION})"
 
   if command -v go >/dev/null 2>&1; then
     local ver
@@ -193,8 +273,8 @@ step_install_go() {
   rm -rf "$tmp"
 
   export PATH="${GO_SDK_DIR}/bin:${PATH}"
-  mkdir -p "${HOME}/.config/gitai"
-  echo "${GO_SDK_DIR}" >"${HOME}/.config/gitai/.go-sdk-installed"
+  mkdir -p "${HOME}/.config/openbench"
+  echo "${GO_SDK_DIR}" >"${HOME}/.config/openbench/.go-sdk-installed"
   ok "Go $(go version | awk '{print $3}') instalado em ${GO_SDK_DIR}"
 }
 
@@ -209,72 +289,81 @@ resolve_repo_root() {
     return 0
   fi
 
-  if [[ -n "${GITAI_ROOT:-}" ]] && [[ -f "${GITAI_ROOT}/go.mod" ]]; then
-    echo "$(cd "${GITAI_ROOT}" && pwd)"
+  if [[ -n "${OPENBENCH_ROOT:-}" ]] && [[ -f "${OPENBENCH_ROOT}/go.mod" ]]; then
+    echo "$(cd "${OPENBENCH_ROOT}" && pwd)"
     return 0
   fi
 
-  if [[ -d "${GITAI_INSTALL_DIR}/.git" ]] && [[ -f "${GITAI_INSTALL_DIR}/go.mod" ]]; then
-    log "Atualizando clone existente em ${GITAI_INSTALL_DIR}"
-    git -C "${GITAI_INSTALL_DIR}" fetch --quiet origin 2>/dev/null || true
-    git -C "${GITAI_INSTALL_DIR}" pull --ff-only --quiet 2>/dev/null || true
-    echo "${GITAI_INSTALL_DIR}"
+  if [[ -d "${OB_INSTALL_DIR}/.git" ]] && [[ -f "${OB_INSTALL_DIR}/go.mod" ]]; then
+    log "Atualizando clone existente em ${OB_INSTALL_DIR}"
+    git -C "${OB_INSTALL_DIR}" fetch --quiet origin 2>/dev/null || true
+    git -C "${OB_INSTALL_DIR}" pull --ff-only --quiet 2>/dev/null || true
+    echo "${OB_INSTALL_DIR}"
     return 0
   fi
 
-  log "Clonando repositório em ${GITAI_INSTALL_DIR}"
-  mkdir -p "$(dirname "${GITAI_INSTALL_DIR}")"
-  git clone --depth 1 "$GITAI_REPO_URL" "${GITAI_INSTALL_DIR}"
-  echo "${GITAI_INSTALL_DIR}"
+  log "Clonando repositório em ${OB_INSTALL_DIR}"
+  mkdir -p "$(dirname "${OB_INSTALL_DIR}")"
+  git clone --depth 1 "$OB_REPO_URL" "${OB_INSTALL_DIR}"
+  echo "${OB_INSTALL_DIR}"
 }
 
 step_repository() {
-  log "3/6 Preparando repositório gitai"
+  log "3/7 Preparando repositório openbench"
   REPO_ROOT="$(resolve_repo_root)"
   ok "Repositório em ${REPO_ROOT}"
 }
 
 step_build_install() {
-  log "4/6 Compilando e instalando gitai"
+  log "4/7 Compilando e instalando openbench"
   export_paths_for_session
   (
     cd "$REPO_ROOT"
-    go run ./cmd/gitai install
+    go run ./cmd/ob install
   )
-  ok "Binário instalado"
+  ok "Binário instalado como openbench"
 }
 
 step_shell_path() {
-  log "5/6 Configurando PATH no shell"
+  log "5/7 Configurando PATH no shell"
   append_path_block
   export_paths_for_session
 }
 
+step_ob_alias() {
+  log "6/7 Configurando alias ob"
+  prompt_ob_alias
+  append_ob_alias_block
+  export_paths_for_session
+}
+
 step_config() {
-  log "6/6 Configuração inicial"
+  log "7/7 Configuração inicial"
   export_paths_for_session
 
-  local gitai_bin
-  if command -v gitai >/dev/null 2>&1; then
-    gitai_bin="gitai"
-  elif [[ -x "${HOME}/go/bin/gitai" ]]; then
-    gitai_bin="${HOME}/go/bin/gitai"
+  local ob_bin
+  if command -v ob >/dev/null 2>&1; then
+    ob_bin="ob"
+  elif command -v openbench >/dev/null 2>&1; then
+    ob_bin="openbench"
+  elif [[ -x "${HOME}/go/bin/openbench" ]]; then
+    ob_bin="${HOME}/go/bin/openbench"
   else
-    die "gitai não encontrado após instalação"
+    die "openbench não encontrado após instalação"
   fi
 
   if [[ "$RUN_CONFIG" -eq 0 ]]; then
-    warn "Wizard pulado (--no-config). Rode depois: gitai config"
+    warn "Wizard pulado (--no-config). Rode depois: ob config"
     return 0
   fi
 
   if [[ ! -t 0 ]]; then
-    warn "Terminal não interativo — rode manualmente: gitai config"
+    warn "Terminal não interativo — rode manualmente: ob config"
     return 0
   fi
 
   log "Iniciando wizard (provider, API key, idioma…)"
-  "$gitai_bin" config
+  "$ob_bin" config
   ok "Configuração concluída"
 }
 
@@ -283,14 +372,16 @@ finish() {
   echo ""
   ok "Instalação completa!"
   echo ""
-  echo "  gitai              Dashboard TUI (dentro de um repo git)"
-  echo "  gitai commit       Commit com IA"
-  echo "  gitai pr           Pull Request com IA"
-  echo "  gitai config show  Ver configuração"
-  echo "  gitai update       Atualizar binário"
+  echo "  openbench          Binário principal"
+  echo "  ob                 Alias no shell (se aceito na instalação)"
+  echo "  ob docker up       Subir ambiente Docker Compose"
+  echo "  ob commit          Commit com IA"
+  echo "  ob pr              Pull Request com IA"
+  echo "  ob config show     Ver configuração"
+  echo "  ob update          Atualizar binário"
   echo ""
-  if ! command -v gitai >/dev/null 2>&1; then
-    warn "O comando gitai pode não estar no PATH desta sessão."
+  if ! command -v ob >/dev/null 2>&1 && ! command -v openbench >/dev/null 2>&1; then
+    warn "Os comandos ob/openbench podem não estar no PATH desta sessão."
     warn "Rode: source $(shell_rc_file)  (ou abra um novo terminal)"
   fi
 }
@@ -298,7 +389,7 @@ finish() {
 main() {
   parse_args "$@"
   echo ""
-  echo "  gitai installer"
+  echo "  openbench installer"
   echo "  ─────────────────────────────────────"
   echo ""
 
@@ -307,6 +398,7 @@ main() {
   step_repository
   step_build_install
   step_shell_path
+  step_ob_alias
   step_config
   finish
 }

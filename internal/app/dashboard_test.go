@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/laerciocrestani/gitai/internal/config"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
+	"github.com/laerciocrestani/openbench/internal/config"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
 )
 
 func TestBuildChangeSummary(t *testing.T) {
@@ -40,7 +40,7 @@ func TestBuildTUINextAction_commit(t *testing.T) {
 				{Path: "internal/ui/header.go", Status: "modified"},
 			},
 		},
-		NextSteps: []NextStep{{Command: "gitai commit"}},
+		NextSteps: []NextStep{{Command: "ob commit"}},
 		Config:    &config.Config{APIKey: "test", Provider: config.ProviderGemini},
 	}
 

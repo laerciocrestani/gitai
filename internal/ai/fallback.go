@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/config"
+	"github.com/laerciocrestani/openbench/internal/config"
 )
 
 type FallbackError struct {
@@ -23,7 +23,7 @@ func (e *FallbackError) Error() string {
 
 	if isDeprecatedGeminiModel(e.FallbackModel) {
 		return fmt.Sprintf(
-			"Gemini: %s indisponível e fallback %s foi descontinuado — atualize fallback_model em `gitai config` (sugestão: gemini-3.1-flash-lite)",
+			"Gemini: %s indisponível e fallback %s foi descontinuado — atualize fallback_model em `ob config` (sugestão: gemini-3.1-flash-lite)",
 			e.PrimaryModel, e.FallbackModel,
 		)
 	}

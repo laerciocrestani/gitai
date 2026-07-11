@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/laerciocrestani/gitai/internal/version"
+	"github.com/laerciocrestani/openbench/internal/version"
 )
 
 // Injetados via -ldflags no go install.
@@ -73,13 +73,13 @@ func versionRoots() []string {
 	if saved := version.SavedRepoRoot(); saved != "" {
 		roots = append(roots, saved)
 	}
-	if cwd := findGitAiRootFromCwd(); cwd != "" {
+	if cwd := findOpenBenchRootFromCwd(); cwd != "" {
 		roots = append(roots, cwd)
 	}
 	return roots
 }
 
-func findGitAiRootFromCwd() string {
+func findOpenBenchRootFromCwd() string {
 	dir, err := os.Getwd()
 	if err != nil {
 		return ""
@@ -87,7 +87,7 @@ func findGitAiRootFromCwd() string {
 	for {
 		modPath := filepath.Join(dir, "go.mod")
 		data, err := os.ReadFile(modPath)
-		if err == nil && strings.Contains(string(data), "github.com/laerciocrestani/gitai") {
+		if err == nil && strings.Contains(string(data), "github.com/laerciocrestani/openbench") {
 			return dir
 		}
 		parent := filepath.Dir(dir)

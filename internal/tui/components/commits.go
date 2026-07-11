@@ -3,8 +3,8 @@ package components
 import (
 	"strings"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/tui/theme"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/tui/theme"
 )
 
 const maxRecentCommits = 3

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
 )
 
 // LoadDiff retorna diff do working tree ou da branch vs base, com título descritivo.

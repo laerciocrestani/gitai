@@ -2,7 +2,7 @@ package theme
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/laerciocrestani/gitai/internal/uiprefs"
+	"github.com/laerciocrestani/openbench/internal/uiprefs"
 )
 
 // Styles holds lipgloss styles for the TUI.

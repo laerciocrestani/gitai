@@ -3,7 +3,7 @@ package tui_test
 import (
 	"testing"
 
-	"github.com/laerciocrestani/gitai/internal/tui"
+	"github.com/laerciocrestani/openbench/internal/tui"
 )
 
 func TestActionProgressWarn(t *testing.T) {

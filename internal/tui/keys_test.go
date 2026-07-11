@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/laerciocrestani/gitai/internal/app"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
+	"github.com/laerciocrestani/openbench/internal/app"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
 )
 
 func keyRunes(s string) tea.KeyMsg {
@@ -117,11 +117,11 @@ func TestParseDashboardKey_lowercaseActions(t *testing.T) {
 	}
 }
 
-func TestShouldLaunch_respectsGITAI_NO_UI(t *testing.T) {
-	t.Setenv("GITAI_NO_UI", "1")
+func TestShouldLaunch_respectsOB_NO_UI(t *testing.T) {
+	t.Setenv("OB_NO_UI", "1")
 	t.Setenv("CI", "")
 	if ShouldLaunch() {
-		t.Fatal("expected false with GITAI_NO_UI")
+		t.Fatal("expected false with OB_NO_UI")
 	}
 }
 

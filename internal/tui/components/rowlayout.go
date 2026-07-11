@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/tui/theme"
-	"github.com/laerciocrestani/gitai/internal/ui"
-	"github.com/laerciocrestani/gitai/internal/uiprefs"
+	"github.com/laerciocrestani/openbench/internal/tui/theme"
+	"github.com/laerciocrestani/openbench/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/uiprefs"
 )
 
 const (

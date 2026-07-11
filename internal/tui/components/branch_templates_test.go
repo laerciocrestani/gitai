@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/laerciocrestani/gitai/internal/tui/components"
+	"github.com/laerciocrestani/openbench/internal/tui/components"
 )
 
 func TestBranchTemplateCatalogOrder(t *testing.T) {

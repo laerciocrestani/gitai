@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/ai"
+	"github.com/laerciocrestani/openbench/internal/ai"
 )
 
 type PRView struct {

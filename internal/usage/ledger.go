@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/laerciocrestani/openbench/internal/config"
 )
 
 const csvHeader = "timestamp,command,project,provider,model,label,input_tokens,output_tokens,cost_usd"
@@ -27,11 +29,11 @@ type Entry struct {
 var writeMu sync.Mutex
 
 func LedgerPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := config.DataDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "gitai", "usage", "ledger.csv"), nil
+	return filepath.Join(dir, "usage", "ledger.csv"), nil
 }
 
 func Log(entry Entry) error {

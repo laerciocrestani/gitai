@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/laerciocrestani/gitai/internal/config"
+	"github.com/laerciocrestani/openbench/internal/config"
 )
 
 func TestWithModelFallbackUsesSecondary(t *testing.T) {

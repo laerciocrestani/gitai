@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
-	"github.com/laerciocrestani/gitai/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/ui"
 )
 
 func TestRenderBoxNoRightBorder(t *testing.T) {
@@ -24,7 +24,7 @@ func TestRenderBoxNoRightBorder(t *testing.T) {
 
 func TestPadLineRightAlign(t *testing.T) {
 	inner := ui.ContentInner(80)
-	left := "Repository: gitai"
+	left := "Repository: openbench"
 	right := "✓ Clean"
 	line := ui.PadLine(left, right, inner)
 	if !strings.HasSuffix(strings.TrimSpace(line), right) {
@@ -45,11 +45,12 @@ func TestPadLineShaded(t *testing.T) {
 
 func TestFormatDashboardHeaderMatchesBoxFormat(t *testing.T) {
 	ctx := &ui.HeaderContext{
-		Repo:     "gitai",
+		Repo:     "openbench",
 		Branch:   "main",
 		HeadHash: "abc1234",
 		Status:   "✓ Clean",
 		Sync:     "↑ 1 ahead",
+		Docker:   "ok",
 		Provider: "gemini",
 		Model:    "gemini-2.5-flash-lite",
 		AIReady:  true,
@@ -57,10 +58,10 @@ func TestFormatDashboardHeaderMatchesBoxFormat(t *testing.T) {
 	}
 	out := ui.FormatDashboardHeader(ctx, 100, false, false)
 	plain := ansi.Strip(out)
-	if !strings.HasPrefix(out, "╭ GITAI") {
+	if !strings.HasPrefix(out, "╭ OPENBENCH") {
 		t.Fatalf("header should start with box top: %q", out)
 	}
-	for _, want := range []string{"AI Git Workflow", "gitai", "✓ Clean", "↑ 1 ahead", "Ready", "abc1234"} {
+	for _, want := range []string{"Dev Environment Orchestrator", "openbench", "✓ Clean", "↑ 1 ahead", "Ready", "abc1234"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("header missing %q", want)
 		}

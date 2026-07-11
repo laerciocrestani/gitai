@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
 )
 
 func TestAnalyzeHealthIssues_baseDivergedWithBuildArtifacts(t *testing.T) {

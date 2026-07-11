@@ -3,7 +3,7 @@ package ai
 import (
 	"testing"
 
-	"github.com/laerciocrestani/gitai/internal/config"
+	"github.com/laerciocrestani/openbench/internal/config"
 )
 
 func TestUsageSummaryFormatLines(t *testing.T) {

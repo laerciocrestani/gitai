@@ -3,7 +3,7 @@ package app_test
 import (
 	"testing"
 
-	"github.com/laerciocrestani/gitai/internal/app"
+	"github.com/laerciocrestani/openbench/internal/app"
 )
 
 func TestStepWeightForKnownLabels(t *testing.T) {

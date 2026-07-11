@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/laerciocrestani/gitai/internal/tui/theme"
-	"github.com/laerciocrestani/gitai/internal/ui"
-	"github.com/laerciocrestani/gitai/internal/uiprefs"
+	"github.com/laerciocrestani/openbench/internal/tui/theme"
+	"github.com/laerciocrestani/openbench/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/uiprefs"
 )
 
 // RenderPanel renders a titled panel with optional body content.

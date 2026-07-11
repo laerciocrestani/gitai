@@ -1,51 +1,48 @@
-# Arquitetura — `gitai ui`
+# Arquitetura — `ob ui`
 
-TUI fullscreen para o Gitai, reutilizando toda a lógica de negócio existente em `internal/*`.
+TUI fullscreen para o openbench, reutilizando toda a lógica de negócio existente em `internal/*`.
 
 ## Objetivo
 
-Oferecer uma experiência integrada no terminal (estilo lazygit/k9s) sem substituir a CLI atual. Comandos como `gitai commit` e `gitai pr` continuam funcionando para scripts, CI e agentes.
+Oferecer uma experiência integrada no terminal (estilo lazygit/k9s) sem substituir a CLI atual. Comandos como `ob commit`, `ob docker up` e `ob pr` continuam funcionando para scripts, CI e agentes.
 
 ```
-┌─ Gitai UI ─────────────────────────────────────────────────────────┐
-│ 🤖 GitAi v0.1.x          owner/repo · feat/my-branch · ↑2 ↓0      │
-├──────────────────┬─────────────────────────────────────────────────┤
-│ Branches         │ Changed files                                   │
-│  * feat/my-branch│  M  internal/app/overview.go                    │
-│    main          │  A  internal/tui/app.go                         │
-│    fix/typo      │  M  cmd/gitai/main.go                           │
-├──────────────────┴─────────────────────────────────────────────────┤
-│ Recent commits                                                   │
-│  abc1234 feat: add tui dashboard                                 │
-├──────────────────────────────────────────────────────────────────┤
-│ Next: [c] commit  [p] push  [r] pr  [d] diff  [s] sync  [q] quit │
-└──────────────────────────────────────────────────────────────────┘
+┌─ OpenBench UI ─────────────────────────────────────────────────────┐
+│ OPENBENCH v0.1.x     owner/repo · feat/my-branch · docker:ok       │
+├────────────────────────────────────────────────────────────────────┤
+│ Environment                                                        │
+│  Docker running · compose.yaml · app running :8080→80              │
+├────────────────────────────────────────────────────────────────────┤
+│ Git Graph · Changed files · Recent commits · AI Engine             │
+├────────────────────────────────────────────────────────────────────┤
+│ Next: [U] up [D] down [c] commit [p] push [P] pr [L] dlogs [q] quit│
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Princípios
 
 | Princípio | Descrição |
 |-----------|-----------|
-| **Lógica separada da apresentação** | `internal/app`, `internal/git`, `internal/ai`, `internal/pr` não importam Bubble Tea |
+| **Lógica separada da apresentação** | `internal/app`, `internal/git`, `internal/docker`, `internal/ai`, `internal/pr` não importam Bubble Tea |
 | **CLI intacta** | `internal/ui` (ANSI/wizard) permanece para comandos one-shot |
 | **Snapshot read-only** | Dashboard carrega `WorkspaceSnapshot` sem efeitos colaterais |
-| **Ações via app layer** | Commit/push/PR chamam `app.Run*` existentes |
+| **Ações via app layer** | Commit/push/PR/Docker chamam `app.Run*` existentes |
 | **Progresso desacoplado** | Interface `Progress` permite spinner na TUI e texto na CLI |
 
 ## Camadas
 
 ```
-cmd/gitai/main.go
+cmd/ob/main.go
        │
-       ├─► gitai (overview CLI) ──► app.RunOverview()
-       ├─► gitai commit/pr/...  ──► app.Run*()
-       └─► gitai ui              ──► tui.Run()
+       ├─► ob (overview CLI) ──► app.RunOverview()
+       ├─► ob commit/pr/docker/... ──► app.Run*()
+       └─► ob ui              ──► tui.Run()
                                           │
                     ┌─────────────────────┼─────────────────────┐
                     ▼                     ▼                     ▼
              app.LoadWorkspace      app.RunCommit         internal/git
-             Snapshot()             app.RunPR             internal/ai
-                    │                     │               internal/pr
+             Snapshot()             app.RunDockerUp       internal/docker
+                    │                     │               internal/ai
                     ▼                     ▼
              tui/views/dashboard    tui/views/action
              (read-only)            (modal + Progress)
@@ -186,7 +183,7 @@ type Progress interface {
 
 | Implementação | Uso |
 |---------------|-----|
-| `ui.Session` | CLI (`gitai commit`, etc.) — já existe, adapter fino |
+| `ui.Session` | CLI (`ob commit`, etc.) — já existe, adapter fino |
 | `tui.Progress` | Atualiza status bar + log lateral no modal |
 
 Migração incremental: `Options.Progress Progress` substitui `Options.UI *ui.Session` quando preenchido.
@@ -223,19 +220,19 @@ Sem dependências novas em `internal/app`, `internal/git`, `internal/ai`.
 
 | Comando | Comportamento |
 |---------|---------------|
-| `gitai ui` | Abre TUI (explícito) |
-| `gitai` | Abre TUI quando `interactive_ui: true` e terminal interativo |
-| `GITAI_NO_UI=1` | Força overview CLI (sobrescreve config) |
+| `ob ui` | Abre TUI (explícito) |
+| `ob` | Abre TUI quando `interactive_ui: true` e terminal interativo |
+| `OB_NO_UI=1` | Força overview CLI (sobrescreve config) |
 | `NO_COLOR=1` | Sem cores — convenção Unix (sobrescreve `ui_color`) |
 
-Detecção de terminal: `term.IsTerminal` + `GITAI_NO_UI` + `CI` — mesma lógica de `ui.Session`.
+Detecção de terminal: `term.IsTerminal` + `OB_NO_UI` + `CI` — mesma lógica de `ui.Session`.
 
 ## Fases de implementação
 
 ### Fase 1 — Dashboard (MVP)
 
 - [x] `WorkspaceSnapshot` + `LoadWorkspaceSnapshot`
-- [x] `gitai ui` com layout básico
+- [x] `ob ui` com layout básico
 - [x] Branches, files, commits, next steps, status bar
 - [x] Refresh (`r`) e quit (`q`)
 
@@ -250,7 +247,7 @@ Detecção de terminal: `term.IsTerminal` + `GITAI_NO_UI` + `CI` — mesma lógi
 
 - [x] Tela de report/usage
 - [x] Temas (dark/light via `NO_COLOR`)
-- [x] `gitai` default → TUI quando TTY interativo
+- [x] `ob` default → TUI quando TTY interativo
 - [x] Testes de keymap e snapshot
 
 ## Testes
@@ -271,4 +268,4 @@ Evitar testes frágeis de renderização pixel-a-pixel.
 | Terminal pequeno (< 80×24) | Layout mínimo com scroll; mensagem se muito pequeno |
 | IA lenta bloqueando UI | Goroutine + spinner; cancel com `Ctrl+C` no modal |
 | Duplicação CLI/TUI | Snapshot e `Run*` compartilhados; zero lógica git na TUI |
-| Conflito com wizard `config` | `gitai config` permanece CLI; link `?` → abre hint |
+| Conflito com wizard `config` | `ob config` permanece CLI; link `?` → abre hint |

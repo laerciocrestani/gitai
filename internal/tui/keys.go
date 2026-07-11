@@ -2,7 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/laerciocrestani/gitai/internal/app"
+	"github.com/laerciocrestani/openbench/internal/app"
 )
 
 type dashKey int
@@ -22,6 +22,10 @@ const (
 	dashKeyLogs
 	dashKeyReport
 	dashKeyDoctor
+	dashKeyDockerUp
+	dashKeyDockerDown
+	dashKeyDockerLogs
+	dashKeyDockerShell
 	dashKeyHelp
 )
 
@@ -84,6 +88,22 @@ func parseDashboardKey(msg tea.KeyMsg, snap *app.WorkspaceSnapshot) (dashKey, bo
 	case "l":
 		if snap != nil && snap.Overview != nil && len(snap.Overview.RecentCommits) > 0 {
 			return dashKeyLogs, true
+		}
+	case "L", "shift+l":
+		if app.CanDockerLogs(snap) {
+			return dashKeyDockerLogs, true
+		}
+	case "U", "shift+u":
+		if app.CanDockerUp(snap) {
+			return dashKeyDockerUp, true
+		}
+	case "D", "shift+d":
+		if app.CanDockerDown(snap) {
+			return dashKeyDockerDown, true
+		}
+	case "E", "shift+e":
+		if app.CanDockerShell(snap) {
+			return dashKeyDockerShell, true
 		}
 	}
 	return dashKeyNone, false

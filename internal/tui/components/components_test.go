@@ -6,9 +6,9 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
-	"github.com/laerciocrestani/gitai/internal/app"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/tui/components"
+	"github.com/laerciocrestani/openbench/internal/app"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/tui/components"
 )
 
 func TestRenderFooterLowercaseKeys(t *testing.T) {

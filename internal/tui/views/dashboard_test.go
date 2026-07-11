@@ -4,11 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/laerciocrestani/gitai/internal/app"
-	"github.com/laerciocrestani/gitai/internal/config"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/tui/components"
-	"github.com/laerciocrestani/gitai/internal/tui/views"
+	"github.com/laerciocrestani/openbench/internal/app"
+	"github.com/laerciocrestani/openbench/internal/config"
+	dockerpkg "github.com/laerciocrestani/openbench/internal/docker"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/tui/components"
+	"github.com/laerciocrestani/openbench/internal/tui/views"
 )
 
 func TestRenderDashboardPanels(t *testing.T) {
@@ -25,12 +26,20 @@ func TestRenderDashboardPanels(t *testing.T) {
 			CommitsAheadOfBase: 2,
 		},
 		Config:    &config.Config{APIKey: "k", Provider: config.ProviderGemini, Model: "gemini-2.5-flash-lite"},
-		NextSteps: []app.NextStep{{Command: "gitai commit"}},
+		NextSteps: []app.NextStep{{Command: "ob commit"}},
 		HasGH:     true,
+		Docker: &dockerpkg.Overview{
+			Available:     true,
+			DaemonRunning: true,
+			ComposeFile:   "compose.yaml",
+			Containers: []dockerpkg.ContainerSummary{
+				{Service: "app", State: "running", Ports: "8080:80"},
+			},
+		},
 	}
 
 	out := views.RenderDashboard(snap, views.DashboardOptions{Width: 80, Height: 40})
-	for _, want := range []string{"Git Graph", "Repository Summary", "Changed Files", "AI Engine", "Recent Commits", "Suggested Action"} {
+	for _, want := range []string{"Environment", "Git Graph", "Repository Summary", "Changed Files", "AI Engine", "Recent Commits", "Suggested Action"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("dashboard missing %q:\n%s", want, out)
 		}

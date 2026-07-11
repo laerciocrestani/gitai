@@ -4,9 +4,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbletea"
-	"github.com/laerciocrestani/gitai/internal/app"
-	gitpkg "github.com/laerciocrestani/gitai/internal/git"
-	"github.com/laerciocrestani/gitai/internal/uiprefs"
+	"github.com/laerciocrestani/openbench/internal/app"
+	dockerpkg "github.com/laerciocrestani/openbench/internal/docker"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
+	"github.com/laerciocrestani/openbench/internal/uiprefs"
 )
 
 const watchDebounce = 400 * time.Millisecond
@@ -99,7 +100,32 @@ func snapshotChanged(a, b *app.WorkspaceSnapshot) bool {
 	if a.Overview == nil || b.Overview == nil {
 		return a.Overview != b.Overview
 	}
+	if dockerChanged(a.Docker, b.Docker) {
+		return true
+	}
 	return overviewChanged(a.Overview, b.Overview)
+}
+
+func dockerChanged(a, b *dockerpkg.Overview) bool {
+	if (a == nil) != (b == nil) {
+		return true
+	}
+	if a == nil {
+		return false
+	}
+	if a.DaemonRunning != b.DaemonRunning || a.ComposeFile != b.ComposeFile || a.Error != b.Error {
+		return true
+	}
+	if len(a.Containers) != len(b.Containers) {
+		return true
+	}
+	for i := range a.Containers {
+		ac, bc := a.Containers[i], b.Containers[i]
+		if ac.Service != bc.Service || ac.State != bc.State || ac.Ports != bc.Ports || ac.Health != bc.Health {
+			return true
+		}
+	}
+	return false
 }
 
 func overviewChanged(a, b *gitpkg.Overview) bool {

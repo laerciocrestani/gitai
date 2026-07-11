@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/ai"
+	"github.com/laerciocrestani/openbench/internal/ai"
 )
 
 func FormatCommit(s *ai.CommitSuggestion, coAuthor string) string {

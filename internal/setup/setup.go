@@ -8,11 +8,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/laerciocrestani/gitai/internal/ui"
-	"github.com/laerciocrestani/gitai/internal/version"
+	"github.com/laerciocrestani/openbench/internal/ui"
+	"github.com/laerciocrestani/openbench/internal/version"
 )
 
-const moduleID = "github.com/laerciocrestani/gitai"
+const moduleID = "github.com/laerciocrestani/openbench"
 
 func Install() error {
 	sess := ui.New("install", false)
@@ -51,7 +51,7 @@ func Install() error {
 	var bin string
 	if err := sess.Step("Verifying installation", func() error {
 		var err error
-		bin, err = GitAiBin()
+		bin, err = ObBin()
 		if err != nil {
 			return fmt.Errorf("instalação falhou — binário não encontrado em %s", GoBinDir())
 		}
@@ -67,7 +67,7 @@ func Install() error {
 		return err
 	}
 
-	sess.Detail("Próximo passo: gitai config")
+	sess.Detail("Próximo passo: ob config")
 	sess.Success("Installation complete 🚀")
 	return nil
 }
@@ -133,7 +133,7 @@ func Update() error {
 		return err
 	}
 
-	bin, err := GitAiBin()
+	bin, err := ObBin()
 	if err != nil {
 		return fmt.Errorf("reinstalação falhou")
 	}
@@ -207,7 +207,7 @@ func updateFromRemote(sess *ui.Session) error {
 		return err
 	}
 
-	bin, err := GitAiBin()
+	bin, err := ObBin()
 	if err != nil {
 		return fmt.Errorf("reinstalação falhou")
 	}
@@ -219,7 +219,7 @@ func updateFromRemote(sess *ui.Session) error {
 
 func defaultSourceCloneDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "gitai", "repository")
+	return filepath.Join(home, ".config", "openbench", "repository")
 }
 
 func ensureFullClone(sess *ui.Session, root string) error {
@@ -248,7 +248,7 @@ func FindRepoRoot() (string, error) {
 		}
 	}
 
-	if env := strings.TrimSpace(os.Getenv("GITAI_ROOT")); env != "" {
+	if env := strings.TrimSpace(os.Getenv("OPENBENCH_ROOT")); env != "" {
 		if isValidRepoRoot(env) {
 			return filepath.Clean(env), nil
 		}
@@ -262,7 +262,7 @@ func FindRepoRoot() (string, error) {
 		return root, nil
 	}
 
-	return "", fmt.Errorf("repositório gitai não encontrado")
+	return "", fmt.Errorf("repositório openbench não encontrado")
 }
 
 func GoBinDir() string {
@@ -273,7 +273,7 @@ func GoBinDir() string {
 	return filepath.Join(home, "go", "bin")
 }
 
-func GitAiBin() (string, error) {
+func ObBin() (string, error) {
 	candidate := filepath.Join(GoBinDir(), binaryName())
 	if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
 		if runtime.GOOS != "windows" {
@@ -319,7 +319,7 @@ func ensurePath(sess *ui.Session) error {
 	}
 	defer f.Close()
 
-	block := fmt.Sprintf("\n# gitai (Go bin)\nexport PATH=\"$PATH:%s\"\n", goBin)
+	block := fmt.Sprintf("\n# openbench (Go bin)\nexport PATH=\"$PATH:%s\"\n", goBin)
 	if _, err := f.WriteString(block); err != nil {
 		return err
 	}
@@ -335,7 +335,8 @@ func goInstall(root string) error {
 		return err
 	}
 
-	args := []string{"install", "-ldflags", info.LDFlags(), "./cmd/gitai"}
+	out := filepath.Join(GoBinDir(), binaryName())
+	args := []string{"install", "-ldflags", info.LDFlags(), "-o", out, "./cmd/ob"}
 
 	cmd := exec.Command("go", args...)
 	cmd.Dir = root
@@ -356,10 +357,10 @@ func requireGo(sess *ui.Session) error {
 
 func checkOptionalTools(sess *ui.Session) {
 	if _, err := exec.LookPath("git"); err != nil {
-		sess.Warn("git not found — required for gitai")
+		sess.Warn("git not found — required for ob")
 	}
 	if _, err := exec.LookPath("gh"); err != nil {
-		sess.Warn("gh not found — required only for gitai pr")
+		sess.Warn("gh not found — required only for ob pr")
 		return
 	}
 	cmd := exec.Command("gh", "auth", "status")
@@ -420,8 +421,8 @@ func pathContains(dir string) bool {
 
 func binaryName() string {
 	if runtime.GOOS == "windows" {
-		return "gitai.exe"
+		return "openbench.exe"
 	}
-	return "gitai"
+	return "openbench"
 }
 

@@ -1,4 +1,4 @@
-module github.com/laerciocrestani/gitai
+module github.com/laerciocrestani/openbench
 
 go 1.25.0
 

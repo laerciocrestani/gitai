@@ -1,16 +1,16 @@
 <p align="center">
-  <img src="avatar.png" alt="GitAi" width="160">
+  <img src="avatar.png" alt="OpenBench" width="160">
 </p>
 
-# gitai
+# openbench (`ob`)
 
-Go CLI to generate **Conventional Commits** with affordable AI, automate **push**, and create detailed **Pull Requests** via GitHub CLI.
+Go CLI to orchestrate **local dev environments** (Docker Compose), generate **Conventional Commits** with affordable AI, automate **push**, and create detailed **Pull Requests** via GitHub CLI.
 
 ---
 
 ## Table of contents
 
-- [Why gitai?](#why-gitai)
+- [Why openbench?](#why-openbench)
 - [Requirements](#requirements)
 - [Quick install](#quick-install)
 - [TUI dashboard](#command-reference)
@@ -21,6 +21,7 @@ Go CLI to generate **Conventional Commits** with affordable AI, automate **push*
 - [Command reference](#command-reference)
 - [Global and per-command flags](#global-and-per-command-flags)
 - [Detailed usage](#detailed-usage)
+- [Repository health (`ob doctor`)](#repository-health-ob-doctor)
 - [Token usage and cost](#token-usage-and-cost)
 - [AI providers](#ai-providers)
 - [Commit and PR format](#commit-and-pr-format)
@@ -30,18 +31,20 @@ Go CLI to generate **Conventional Commits** with affordable AI, automate **push*
 
 ---
 
-## Why gitai?
+## Why openbench?
 
-Editor AI assistants often burn expensive tokens reading diffs, writing commit messages, and running git. **gitai** moves that workflow to a configurable AI (DeepSeek via OpenRouter, GPT-4o-mini, Gemini Flash) for fractions of a cent — works with any editor or agent (Claude Code, Copilot, terminal, etc.).
+Editor AI assistants often burn expensive tokens reading diffs, writing commit messages, and running git. **openbench** (`ob`) moves that workflow to a configurable AI (DeepSeek via OpenRouter, GPT-4o-mini, Gemini Flash) for fractions of a cent — and adds a **Docker Compose controller** plus a unified TUI dashboard.
 
-With gitai you get:
+With openbench you get:
 
+- **Docker environment panel** — compose detection, container status, `ob docker up/down/logs/sh`
 - Messages following **Conventional Commits**
 - Commit messages that cover **all changed areas** (uses `git diff --stat` + full diff)
 - **Split suggestion** when changes span unrelated modules (e.g. leads + payments)
 - Structured PRs with **Summary**, **Changes**, **Test plan**, and **Notes**
 - **Token and cost** summary (estimate before AI + total after execution)
-- **Spending report** (`gitai report`) with CSV history
+- **Spending report** (`ob report`) with CSV history
+- **Repository health** (`ob doctor`) — divergence, sync issues, build-artifact commits, and recommended fixes
 - Native integration with **`gh pr create`**
 
 ---
@@ -51,10 +54,10 @@ With gitai you get:
 | Tool | Minimum version | Purpose |
 |------|-----------------|---------|
 | [git](https://git-scm.com/) | any recent | Local repo, diff, commit, push |
-| [Go](https://go.dev/dl/) | 1.22+ | Build gitai (`install.sh` installs automatically if missing) |
-| [GitHub CLI (`gh`)](https://cli.github.com/) | authenticated | Create PR (`gitai pr`) — optional until you use PR |
+| [Go](https://go.dev/dl/) | 1.22+ | Build openbench (`install.sh` installs automatically if missing) |
+| [GitHub CLI (`gh`)](https://cli.github.com/) | authenticated | Create PR (`ob pr`) — optional until you use PR |
 
-Authenticate GitHub CLI before using `gitai pr`:
+Authenticate GitHub CLI before using `ob pr`:
 
 ```bash
 gh auth login
@@ -71,43 +74,45 @@ The `install.sh` script runs **everything in order**:
 
 1. Checks `git`, `curl`, and `tar`
 2. Installs Go in `~/sdk/go` if no compatible version is found
-3. Clones the repo to `~/.config/gitai/repository` (or uses the current clone)
-4. Builds and installs the binary (`go run ./cmd/gitai install`)
+3. Clones the repo to `~/.config/openbench/repository` (or uses the current clone)
+4. Builds and installs the binary as `openbench` (`go run ./cmd/ob install`)
 5. Writes `PATH` to `~/.zshrc` or `~/.bashrc` (Go + `~/go/bin`)
-6. Runs `gitai config` (interactive wizard)
+6. Asks whether to add shell alias `ob` → `openbench` (writes to the same rc file)
+7. Runs `ob config` (interactive wizard)
 
 **From a clone:**
 
 ```bash
-git clone https://github.com/laerciocrestani/gitai.git
-cd gitai
+git clone https://github.com/laerciocrestani/openbench.git
+cd openbench
 ./install.sh
 ```
 
 **Without cloning (curl):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/laerciocrestani/gitai/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/laerciocrestani/openbench/main/install.sh | bash
 ```
 
 Installer options:
 
 | Option | Description |
 |--------|-------------|
-| `--no-config` | Skip the `gitai config` wizard at the end |
+| `--no-config` | Skip the `ob config` wizard at the end |
+| `--no-alias` | Do not prompt for or create the `ob` shell alias |
 | `--skip-go` | Do not install Go automatically (fails if missing) |
 | `--help` | Help |
 
-Useful variables: `GITAI_REPO_URL`, `GITAI_INSTALL_DIR`, `GO_VERSION` (default `1.25.0`).
+Useful variables: `OB_REPO_URL`, `OB_INSTALL_DIR`, `GO_VERSION` (default `1.25.0`).
 
 ### Uninstall
 
-Removes the binary, `~/.config/gitai/`, PATH blocks in your shell, and (if installed by `install.sh`) Go in `~/sdk/go`:
+Removes the `openbench` binary (and legacy `ob` if present), `~/.config/openbench/`, PATH and alias blocks in your shell, and (if installed by `install.sh`) Go in `~/sdk/go`:
 
 ```bash
 ./uninstall.sh
 # or
-curl -fsSL https://raw.githubusercontent.com/laerciocrestani/gitai/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/laerciocrestani/openbench/main/uninstall.sh | bash
 ```
 
 | Option | Description |
@@ -116,16 +121,16 @@ curl -fsSL https://raw.githubusercontent.com/laerciocrestani/gitai/main/uninstal
 | `--remove-go` | Remove `~/sdk/go` even without installer marker |
 | `--keep-go` | Keep Go in `~/sdk/go` |
 
-**Does not remove:** `.gitai.yaml` files in projects or manually set `GITAI_*` variables.
+**Does not remove:** `.openbench.yaml` files in projects or manually set `OB_*` variables.
 
 The `./scripts/setup.sh uninstall` script delegates to `./uninstall.sh`.
 
 After installing, open a new terminal (or `source ~/.zshrc`) and run:
 
 ```bash
-gitai              # TUI dashboard inside a git repo
-gitai commit
-gitai pr
+ob                 # TUI dashboard inside a git repo
+ob commit
+ob pr
 ```
 
 ### Post-install commands
@@ -133,14 +138,15 @@ gitai pr
 | Command | What it does |
 |---------|--------------|
 | `./install.sh` | Full install (Go + binary + PATH + config) |
-| `./uninstall.sh` | Remove gitai, data, and installer PATH |
-| `gitai config` | Configuration wizard (same as `gitai config init`) |
-| `gitai config show` | Show active config (masked API key) |
-| `gitai update` | Update and reinstall binary (works from any directory) |
-| `gitai version` | Auto version + commit + commit count |
-| `gitai report` | AI usage and cost report (last 24h by default) |
-| `gitai pricing update` | Fetch official Gemini prices and save locally |
-| `gitai status` | Alias for `git status` |
+| `./uninstall.sh` | Remove openbench, data, and installer PATH |
+| `ob config` | Configuration wizard (same as `ob config init`) |
+| `ob config show` | Show active config (masked API key) |
+| `ob update` | Update and reinstall binary (works from any directory) |
+| `ob version` | Auto version + commit + commit count |
+| `ob report` | AI usage and cost report (last 24h by default) |
+| `ob doctor` | Repository health panorama (sync, divergence, recommendations) |
+| `ob pricing update` | Fetch official Gemini prices and save locally |
+| `ob status` | Alias for `git status` |
 
 The `./scripts/setup.sh` script is a compatibility wrapper that delegates to `./install.sh` and `./uninstall.sh`.
 
@@ -149,10 +155,10 @@ The `./scripts/setup.sh` script is a compatibility wrapper that delegates to `./
 From any directory:
 
 ```bash
-gitai update
+ob update
 ```
 
-gitai uses the saved clone in `~/.config/gitai/repository`, the `GITAI_ROOT` variable, or downloads the latest version from GitHub automatically if no local clone is found.
+openbench uses the saved clone in `~/.config/openbench/repository`, the `OPENBENCH_ROOT` variable, or downloads the latest version from GitHub automatically if no local clone is found.
 
 ---
 
@@ -163,8 +169,8 @@ If you prefer not to use `install.sh`:
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/laerciocrestani/gitai.git
-cd gitai
+git clone https://github.com/laerciocrestani/openbench.git
+cd openbench
 ```
 
 ### 2. Install Go 1.22+
@@ -174,15 +180,15 @@ https://go.dev/dl/ — or let `./install.sh` install to `~/sdk/go`.
 ### 3. Install the binary
 
 ```bash
-go run ./cmd/gitai install
+go run ./cmd/ob install
 ```
 
-The binary is installed to `~/go/bin/gitai` and the installer configures PATH.
+The binary is installed to `~/go/bin/ob` and the installer configures PATH.
 
 ### 4. Configure
 
 ```bash
-gitai config
+ob config
 ```
 
 ### Alternative without changing PATH
@@ -190,8 +196,8 @@ gitai config
 Run directly by full path:
 
 ```bash
-~/go/bin/gitai config init
-~/go/bin/gitai pr
+~/go/bin/ob config init
+~/go/bin/ob pr
 ```
 
 ---
@@ -199,22 +205,22 @@ Run directly by full path:
 ## Updating
 
 ```bash
-gitai update
+ob update
 ```
 
 Optional — point to your local clone:
 
 ```bash
-export GITAI_ROOT=~/projects/gitai
-gitai update
+export OPENBENCH_ROOT=~/projects/openbench
+ob update
 ```
 
 Or manually, inside the clone:
 
 ```bash
-cd gitai
+cd openbench
 git pull origin main
-go install ./cmd/gitai
+go install ./cmd/ob
 ```
 
 ---
@@ -224,10 +230,10 @@ go install ./cmd/gitai
 ### Interactive wizard (recommended)
 
 ```bash
-gitai config
+ob config
 ```
 
-Same as `gitai config init`.
+Same as `ob config init`.
 
 The wizard asks, in this order:
 
@@ -239,17 +245,17 @@ The wizard asks, in this order:
 | Language | default: `pt-BR` | Language of generated commit/PR messages |
 | Base branch | default: `main` | Branch used as PR base |
 | Co-author | optional | Trailer appended to the commit |
-| Clear terminal | `y` / `n` | Clear the console before each gitai command |
+| Clear terminal | `y` / `n` | Clear the console before each ob command |
 
 Provider and model use arrow navigation (`↑↓`) or `j`/`k`. Outside a TTY (CI, pipe), it falls back to a numbered list.
 
 If config already exists, **Enter on any field keeps the current value** (e.g. `[gemini]`).
 
-Saved to `~/.config/gitai/config.yaml` with permission `0600`.
+Saved to `~/.config/openbench/config.yaml` with permission `0600`.
 
 ### Global config file
 
-Default path: `~/.config/gitai/config.yaml`
+Default path: `~/.config/openbench/config.yaml`
 
 ```yaml
 provider: openrouter        # openai | gemini | openrouter
@@ -260,7 +266,7 @@ base_branch: "main"
 co_author: ""
 max_diff_bytes: 120000
 clear_screen: false       # true = clear terminal before each command
-interactive_ui: true      # true = gitai opens TUI in terminal (default)
+interactive_ui: true      # true = ob opens TUI in terminal (default)
 ui_color: true            # colors in CLI and TUI (default)
 ui_auto_refresh_seconds: 5   # dashboard polling (0 = off)
 ui_watch_files: true      # fsnotify on working tree (default)
@@ -272,7 +278,7 @@ ui_watch_files: true      # fsnotify on working tree (default)
 
 ### Per-repository local config
 
-Create `.gitai.yaml` at the project root. **Takes priority** over global config.
+Create `.openbench.yaml` at the project root. **Takes priority** over global config.
 
 Useful for:
 
@@ -284,25 +290,25 @@ Useful for:
 
 | Variable | Description |
 |----------|-------------|
-| `GITAI_API_KEY` | Overrides YAML `api_key` (recommended in CI) |
-| `GITAI_CONFIG` | Alternate config file path |
-| `GITAI_ROOT` | Path to gitai clone (used by `gitai update` and `install.sh`) |
-| `GITAI_NO_CLEAR` | Disable terminal clear (`clear_screen` ignored) |
-| `GITAI_NO_UI` | Force CLI overview instead of TUI (`interactive_ui` ignored) |
+| `OB_API_KEY` | Overrides YAML `api_key` (recommended in CI) |
+| `OB_CONFIG` | Alternate config file path |
+| `OPENBENCH_ROOT` | Path to openbench clone (used by `ob update` and `install.sh`) |
+| `OB_NO_CLEAR` | Disable terminal clear (`clear_screen` ignored) |
+| `OB_NO_UI` | Force CLI overview instead of TUI (`interactive_ui` ignored) |
 | `NO_COLOR` | Disable ANSI colors (Unix convention; see [no-color.org](https://no-color.org)) |
 
 Example:
 
 ```bash
-export GITAI_API_KEY="sk-or-v1-..."
-export GITAI_CONFIG="$HOME/.config/gitai/work.yaml"
-gitai pr
+export OB_API_KEY="sk-or-v1-..."
+export OB_CONFIG="$HOME/.config/openbench/work.yaml"
+ob pr
 ```
 
 ### Show current configuration
 
 ```bash
-gitai config show
+ob config show
 ```
 
 The API key is **masked** in output (e.g. `sk-o...abcd`).
@@ -312,14 +318,14 @@ The API key is **masked** in output (e.g. `sk-o...abcd`).
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `provider` | string | yes | `openrouter` | `openai`, `gemini`, or `openrouter` |
-| `api_key` | string | yes* | — | API key (* or `GITAI_API_KEY`) |
+| `api_key` | string | yes* | — | API key (* or `OB_API_KEY`) |
 | `model` | string | yes | depends | Model identifier on the provider |
 | `language` | string | no | `pt-BR` | Commit and PR language |
-| `base_branch` | string | no | `main` | Default base branch for `gitai pr` |
+| `base_branch` | string | no | `main` | Default base branch for `ob pr` |
 | `co_author` | string | no | empty | Commit trailer (e.g. `Co-authored-by: Name <email@example.com>`) |
 | `max_diff_bytes` | int | no | `120000` | Max diff size sent to AI |
 | `clear_screen` | bool | no | `false` | Clear terminal before each command |
-| `interactive_ui` | bool | no | `true` | Open TUI when running `gitai` with no subcommand |
+| `interactive_ui` | bool | no | `true` | Open TUI when running `ob` with no subcommand |
 | `ui_color` | bool | no | `true` | ANSI colors in CLI and TUI |
 | `ui_auto_refresh_seconds` | int | no | `5` | Dashboard polling in seconds (`0` = off) |
 | `ui_watch_files` | bool | no | `true` | Watch filesystem changes (fsnotify) |
@@ -344,7 +350,7 @@ Version is **automatic**, derived from the number of commits in the repository (
 - each additional commit increments patch → e.g. 14 commits = `v0.1.13`
 
 ```bash
-gitai version
+ob version
 ```
 
 Shows version, commit, total commits, and whether the tree is dirty.
@@ -355,9 +361,9 @@ Shows version, commit, total commits, and whether the tree is dirty.
 
 ## Command reference
 
-Running **`gitai` with no subcommand** inside a git repository opens the **fullscreen TUI** (dashboard) with panels:
+Running **`ob` with no subcommand** inside a git repository opens the **fullscreen TUI** (dashboard) with panels:
 
-![gitai TUI dashboard](docs/tui-dashboard.png)
+![openbench TUI dashboard](docs/tui-dashboard.png)
 
 - **Git Graph** — current branch vs base
 - **Repository Summary** — changed files and `+N · -M` stats
@@ -379,6 +385,7 @@ Running **`gitai` with no subcommand** inside a git repository opens the **fulls
 | `y` | Copy HEAD hash |
 | `s` | Sync (when behind) |
 | `o` | Open PR in browser |
+| `h` | Repository health (doctor) |
 | `u` | AI usage/cost report |
 | `r` | Refresh dashboard |
 | `?` | Help |
@@ -386,11 +393,14 @@ Running **`gitai` with no subcommand** inside a git repository opens the **fulls
 
 Commit, push, and PR go through **preview with confirmation** (`Enter` confirms, `esc` cancels). On preview, `e` edits the message (commit/push) or title/body (PR).
 
-With `GITAI_NO_UI=1` or outside a git repo, shows the **CLI overview** (ANSI text).
+On the **doctor** screen (`h`): `e` enriches with AI, `r` refreshes, `esc` back.
+
+With `OB_NO_UI=1` or outside a git repo, shows the **CLI overview** (ANSI text).
 
 ```
-gitai                 TUI dashboard or CLI overview (default)
+ob                    TUI dashboard or CLI overview (default)
 ├── sync              fetch + pull base branch (--prune to clean branches)
+├── doctor            repository health panorama (--explain for AI)
 ├── update            update and reinstall binary
 ├── version           auto version + commit
 ├── report            AI usage and cost report
@@ -401,9 +411,9 @@ gitai                 TUI dashboard or CLI overview (default)
 ├── pricing           Gemini prices (update / show / report)
 │   ├── update        fetch official prices from the web
 │   ├── show          show saved prices
-│   └── report        alias for gitai report --all
+│   └── report        alias for ob report --all
 └── config            configuration wizard (or init/show subcommands)
-    ├── init          interactive wizard (alias for gitai config)
+    ├── init          interactive wizard (alias for ob config)
     └── show          show active config (masked key)
 ```
 
@@ -413,21 +423,23 @@ gitai                 TUI dashboard or CLI overview (default)
 
 | Command | What it does | Calls AI? | Runs git? | Runs gh? |
 |---------|--------------|-----------|-----------|----------|
-| `gitai` | Repository overview | no | read-only | no |
-| `gitai sync` | Sync base branch with origin | no | `fetch`, `pull` | no |
-| `gitai sync --prune` | Sync + remove merged/absorbed branches (remote first, then local) | no | `fetch`, `pull`, `push --delete`, `fetch`, `branch -d/-D` | no |
-| `gitai sync --prune-remote` | Sync + remove merged/absorbed branches on GitHub only | no | `fetch`, `pull`, `push --delete`, `fetch` | no |
-| `gitai version` | Show version, commit, and commit count | no | read-only | no |
-| `gitai report` | AI usage/cost report | no | read-only | no |
-| `gitai pricing update` | Update Gemini price table | no | no | no |
-| `gitai commit` | Commit with generated message | 1× (commit) | `add`, `commit` | no |
-| `gitai push` | Commit (if diff) + push | 0–1× | `add`, `commit`, `push` | no |
-| `gitai pr` | Commit + push + PR | 1–2× (commit + PR) | `add`, `commit`, `push` | `pr create` |
-| `gitai status` | Show repository status | no | `status` | no |
-| `gitai config` | Create/update config.yaml | no | no | no |
-| `gitai config init` | Same as `gitai config` | no | no | no |
-| `gitai config show` | Show config | no | no | no |
-| `gitai update` | Update and reinstall binary | no | no | no |
+| `ob` | Repository overview | no | read-only | no |
+| `ob sync` | Sync base branch with origin | no | `fetch`, `pull` | no |
+| `ob sync --prune` | Sync + remove merged/absorbed branches (remote first, then local) | no | `fetch`, `pull`, `push --delete`, `fetch`, `branch -d/-D` | no |
+| `ob sync --prune-remote` | Sync + remove merged/absorbed branches on GitHub only | no | `fetch`, `pull`, `push --delete`, `fetch` | no |
+| `ob doctor` | Health panorama: branch, sync, divergence, recommendations | no | read-only | no |
+| `ob doctor --explain` | Same + AI explanation and suggested steps | 1× | read-only | no |
+| `ob version` | Show version, commit, and commit count | no | read-only | no |
+| `ob report` | AI usage/cost report | no | read-only | no |
+| `ob pricing update` | Update Gemini price table | no | no | no |
+| `ob commit` | Commit with generated message | 1× (commit) | `add`, `commit` | no |
+| `ob push` | Commit (if diff) + push | 0–1× | `add`, `commit`, `push` | no |
+| `ob pr` | Commit + push + PR | 1–2× (commit + PR) | `add`, `commit`, `push` | `pr create` |
+| `ob status` | Show repository status | no | `status` | no |
+| `ob config` | Create/update config.yaml | no | no | no |
+| `ob config init` | Same as `ob config` | no | no | no |
+| `ob config show` | Show config | no | no | no |
+| `ob update` | Update and reinstall binary | no | no | no |
 
 ---
 
@@ -445,12 +457,12 @@ Available on `commit`, `push`, and `pr`:
 Examples:
 
 ```bash
-gitai commit --dry-run
-gitai pr --verbose --dry-run
-gitai push --verbose
+ob commit --dry-run
+ob pr --verbose --dry-run
+ob push --verbose
 ```
 
-### `gitai commit` flags
+### `ob commit` flags
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
@@ -458,10 +470,10 @@ gitai push --verbose
 
 ```bash
 git add src/auth.go
-gitai commit --no-add
+ob commit --no-add
 ```
 
-### `gitai push` flags
+### `ob push` flags
 
 Inherits all `commit` flags:
 
@@ -475,7 +487,7 @@ After commit, runs:
 git push -u origin HEAD
 ```
 
-### `gitai pr` flags
+### `ob pr` flags
 
 Inherits global flags and `--no-add`, plus:
 
@@ -488,27 +500,27 @@ Inherits global flags and `--no-add`, plus:
 Examples:
 
 ```bash
-gitai pr
-gitai pr --draft
-gitai pr --base develop
-gitai pr --no-add --draft --base main --verbose --dry-run
+ob pr
+ob pr --draft
+ob pr --base develop
+ob pr --no-add --draft --base main --verbose --dry-run
 ```
 
 ### Combining flags
 
 ```bash
 # Full pr flow preview without changing anything
-gitai pr --dry-run --verbose
+ob pr --dry-run --verbose
 
 # Commit only what is already staged, no push
-gitai commit --no-add
+ob commit --no-add
 
 # Draft PR against develop, no git add
 git add .
-gitai pr --no-add --draft --base develop
+ob pr --no-add --draft --base develop
 ```
 
-### `gitai report` flags
+### `ob report` flags
 
 | Flag | Description |
 |------|-------------|
@@ -521,10 +533,82 @@ gitai pr --no-add --draft --base develop
 Default (no flags): **last 24 hours**.
 
 ```bash
-gitai report
-gitai report --hour
-gitai report --days 7
-gitai report --all
+ob report
+ob report --hour
+ob report --days 7
+ob report --all
+```
+
+### `ob doctor` flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--explain` | bool | `false` | Call AI for a detailed explanation and step-by-step recovery (requires API key) |
+| `--base` | string | config `base_branch` | Base branch used for divergence analysis (default: `main`) |
+
+```bash
+ob doctor
+ob doctor --explain
+ob doctor --base develop
+```
+
+---
+
+## Repository health (`ob doctor`)
+
+**When to use:** understand what is going on in the repo — especially after a failed sync, diverged branches, or accidental commits on `main`.
+
+**Does not modify anything** by default. It collects Git facts, applies deterministic rules, and prints a **health panorama**:
+
+| Section | Content |
+|---------|---------|
+| **Overall status** | Healthy / attention / critical |
+| **Branch & base** | Current branch, base, working tree state |
+| **Sync** | Ahead/behind/diverged vs upstream |
+| **Development** | Commits ahead of base (feature work in progress) |
+| **Open PR** | Current PR if `gh` is available |
+| **Findings** | Dirty tree, divergence, build-artifact commits, etc. |
+| **Divergence** | Local vs remote commits, merge-base |
+| **Recommendations** | Concrete commands (`ob sync`, `git rebase`, `git reset --hard`, etc.) |
+
+### Deterministic first, AI optional
+
+- **`ob doctor`** — free, no API call. Detects common patterns (e.g. `.pnpm-store/`, `dist/`, `.astro/` in local-only commits).
+- **`ob doctor --explain`** — sends structured facts to AI for a narrative summary, risk level, and recovery steps.
+
+### TUI
+
+Press **`h`** on the dashboard to open the health screen. Press **`e`** to enrich with AI (same as `--explain`).
+
+### Sync integration
+
+When `ob sync` fails because branches diverged (`pull --ff-only`), ob prints a **quick diagnosis** before exiting and suggests running `ob doctor`.
+
+### Example: diverged `main`
+
+```
+fatal: Not possible to fast-forward, aborting.
+```
+
+`ob doctor` might report:
+
+```
+Panorama de saúde
+
+  Status geral: crítico — ação necessária
+  Branch: main → base main
+  Working tree: limpa
+  Sync upstream: divergiu (↑2 · ↓7)
+
+Achados
+  ✗ Base "main" divergiu de origin/main
+      local ↑2 · remoto ↑7 · merge-base 907f5954
+  ! Commit ab0a7ef parece conter artefatos de build
+      Update dependencies — 9800 arquivo(s), 9500 artefato(s) de build
+
+Recomendações
+  → git fetch origin && git reset --hard origin/main  # descarta commits locais de build
+  → git fetch origin && git rebase origin/main  # se os commits locais têm valor
 ```
 
 ---
@@ -540,10 +624,10 @@ git checkout -b feat/my-feature
 # 2. Make your code changes
 
 # 3. Commit + push + PR in one command
-gitai pr
+ob pr
 ```
 
-`gitai pr` runs internally:
+`ob pr` runs internally:
 
 ```
 git add .
@@ -562,7 +646,7 @@ gh pr create --title "..." --body "..." --base main
 Shows token and cost summary
 ```
 
-### `gitai commit`
+### `ob commit`
 
 **When to use:** commit only, no push or PR.
 
@@ -579,18 +663,18 @@ Shows token and cost summary
 **Diff used:** pending local changes (staged preferred). The AI always receives the file list from `--stat` plus the patch content, so unrelated changes (e.g. a new Artisan command and payment controller fixes) are not silently omitted from the message.
 
 ```bash
-gitai commit
-gitai commit --no-add
-gitai commit --dry-run --verbose   # review message + notes before committing
+ob commit
+ob commit --no-add
+ob commit --dry-run --verbose   # review message + notes before committing
 ```
 
 **Tip:** For unrelated changes, prefer atomic commits:
 
 ```bash
 git add app/Console/Commands/
-gitai commit --no-add
+ob commit --no-add
 git add app/Http/Controllers/PaymentController.php resources/views/customers/
-gitai commit --no-add
+ob commit --no-add
 ```
 
 **Common errors:**
@@ -600,7 +684,7 @@ gitai commit --no-add
 
 ---
 
-### `gitai push`
+### `ob push`
 
 **When to use:** push branch to origin. If there are pending changes, commits first; otherwise pushes existing commits.
 
@@ -608,19 +692,19 @@ gitai commit --no-add
 
 **Flow:** `git add .` (unless `--no-add`) → read diff + `--stat` → split warning (if needed) → AI commit (only if diff) → `git push -u origin HEAD`.
 
-> `gitai push` **auto-commits** pending changes with AI before pushing. Use `--dry-run` to preview the message first.
+> `ob push` **auto-commits** pending changes with AI before pushing. Use `--dry-run` to preview the message first.
 
 ```bash
-gitai push
-gitai push --no-add
-gitai push --dry-run
+ob push
+ob push --no-add
+ob push --dry-run
 ```
 
 > Token/cost summary is shown after commit (inside the push flow). Push itself does not consume AI.
 
 ---
 
-### `gitai pr` (main command)
+### `ob pr` (main command)
 
 **When to use:** finish work on the branch — pending commit, push, and detailed PR.
 
@@ -645,10 +729,10 @@ gitai push --dry-run
 3. Error if neither exists → run `git fetch`
 
 ```bash
-gitai pr
-gitai pr --draft
-gitai pr --base develop
-gitai pr --verbose --dry-run
+ob pr
+ob pr --draft
+ob pr --base develop
+ob pr --verbose --dry-run
 ```
 
 **Generated PR body:**
@@ -672,24 +756,24 @@ gitai pr --verbose --dry-run
 
 - `PR already exists: https://...` — branch already has an open PR
 - `base branch "main" not found` — run `git fetch origin`
-- `config not found` — run `gitai config init`
+- `config not found` — run `ob config init`
 
 ---
 
-### `gitai config init`
+### `ob config init`
 
 Interactive wizard. Does not change git repositories — only creates/updates global YAML.
 
 ```bash
-gitai config init
+ob config init
 ```
 
-### `gitai config show`
+### `ob config show`
 
-Loads effective config (local `.gitai.yaml` or global) and prints with masked key.
+Loads effective config (local `.openbench.yaml` or global) and prints with masked key.
 
 ```bash
-gitai config show
+ob config show
 ```
 
 ---
@@ -698,7 +782,7 @@ gitai config show
 
 ### Estimate (before AI)
 
-Before the `Thinking` step, gitai shows an estimate:
+Before the `Thinking` step, openbench shows an estimate:
 
 ```
 Estimate: ~1750 tokens · $0.000275 USD (Gemini) (input ~1500 + output ~250)
@@ -706,7 +790,7 @@ Estimate: ~1750 tokens · $0.000275 USD (Gemini) (input ~1500 + output ~250)
 
 ### After execution
 
-At the end of **`commit`**, **`push`**, and **`pr`**:
+At the end of **`commit`**, **`push`**, **`pr`**, and **`doctor --explain`**:
 
 ```
 AI usage
@@ -714,7 +798,7 @@ AI usage
 • Total: 8606 prompt + 186 completion = 8792 tokens | total cost: $0.000412 USD
 ```
 
-Each call is logged to `~/.config/gitai/usage/ledger.csv` for `gitai report`.
+Each call is logged to `~/.config/openbench/usage/ledger.csv` for `ob report`.
 
 ### How cost is calculated
 
@@ -722,13 +806,13 @@ Each call is logged to `~/.config/gitai/usage/ledger.csv` for `gitai report`.
 |----------|--------|------|
 | **OpenRouter** | `usage.*` | Real via `usage.cost` (USD) |
 | **OpenAI** | `usage.*` | Estimate (default or config prices) |
-| **Gemini** | `usageMetadata.*` | Estimate with defaults or `gitai pricing update` |
+| **Gemini** | `usageMetadata.*` | Estimate with defaults or `ob pricing update` |
 
 ### Gemini prices
 
 ```bash
-gitai pricing update   # fetch official prices and save to ~/.config/gitai/pricing.yaml
-gitai pricing show     # show saved table
+ob pricing update   # fetch official prices and save to ~/.config/openbench/pricing.yaml
+ob pricing show     # show saved table
 ```
 
 Models with built-in default prices (e.g. `gemini-2.5-flash-lite` → $0.10 / $0.40 per 1M tokens).
@@ -791,7 +875,7 @@ api_key: "AIza..."
 model: "gemini-2.5-flash-lite"
 ```
 
-Built-in default prices ($0.10 input / $0.40 output per 1M tokens). Update with `gitai pricing update`.
+Built-in default prices ($0.10 input / $0.40 output per 1M tokens). Update with `ob pricing update`.
 
 ---
 
@@ -799,7 +883,7 @@ Built-in default prices ($0.10 input / $0.40 output per 1M tokens). Update with 
 
 ### Conventional Commit
 
-AI returns JSON and gitai formats:
+AI returns JSON and openbench formats:
 
 ```
 feat: add Meta lead reprocess command and fix auto payments
@@ -840,13 +924,13 @@ Accepted types: `fix`, `feat`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
 | **Test plan** | Actionable checklist for validation |
 | **Notes** | Risks, breaking changes, migrations (optional) |
 
-> Commit and PR **language** follows the `language` field in `gitai config` (default `pt-BR`). The TUI itself is always in English.
+> Commit and PR **language** follows the `language` field in `ob config` (default `pt-BR`). The TUI itself is always in English.
 
 ---
 
 ## Troubleshooting
 
-### `gitai: command not found`
+### `ob: command not found`
 
 Run the installer or add to PATH:
 
@@ -857,10 +941,10 @@ export PATH="$HOME/sdk/go/bin:$PATH:$HOME/go/bin"
 source ~/.zshrc
 ```
 
-### `config not found. Run: gitai config init`
+### `config not found. Run: ob config init`
 
 ```bash
-gitai config init
+ob config init
 ```
 
 ### `api_key not configured`
@@ -868,7 +952,7 @@ gitai config init
 Set in YAML or:
 
 ```bash
-export GITAI_API_KEY="your-key"
+export OB_API_KEY="your-key"
 ```
 
 ### `base branch "main" not found`
@@ -881,7 +965,7 @@ git branch -a   # confirm origin/main
 Or adjust in config / flag:
 
 ```bash
-gitai pr --base develop
+ob pr --base develop
 ```
 
 ### `PR already exists`
@@ -908,30 +992,48 @@ The file list from `git diff --stat` is always sent in full (small payload). Onl
 
 ### Commit message missing some changes
 
-gitai sends `--stat` + diff, but a single commit mixing unrelated areas can still produce a narrow title. Prefer:
+openbench sends `--stat` + diff, but a single commit mixing unrelated areas can still produce a narrow title. Prefer:
 
-1. `gitai commit --dry-run --verbose` — review before committing
-2. Atomic commits per area (`git add <paths>` + `gitai commit --no-add`)
+1. `ob commit --dry-run --verbose` — review before committing
+2. Atomic commits per area (`git add <paths>` + `ob commit --no-add`)
 3. Heed the **split suggestion** when multiple modules appear in the stat
 
 ### Cost not shown
 
 - Use **OpenRouter** for automatic real cost
-- Run `gitai pricing update` for Gemini
+- Run `ob pricing update` for Gemini
 - Or set `input_price_per_1m` and `output_price_per_1m` in YAML
 
-### Empty `gitai report`
+### Empty `ob report`
 
-The ledger is only filled after running `commit`, `push`, or `pr` with AI. Check `~/.config/gitai/usage/ledger.csv`.
+The ledger is only filled after running `commit`, `push`, `pr`, or `doctor --explain` with AI. Check `~/.config/openbench/usage/ledger.csv`.
+
+### `Not possible to fast-forward` on sync
+
+Local and remote branches diverged — a normal `git pull --ff-only` cannot proceed.
+
+```bash
+ob doctor              # see what diverged and recommended fixes
+ob doctor --explain    # AI narrative + recovery steps
+```
+
+Common fix when local commits are build artifacts (`.pnpm-store/`, `dist/`, etc.):
+
+```bash
+git fetch origin
+git reset --hard origin/main   # ⚠ discards local-only commits
+```
+
+If local commits contain real work, prefer `git rebase origin/main` or a feature branch instead of resetting.
 
 ---
 
 ## Security
 
-- **Never** commit `config.yaml` or `.gitai.yaml` with API keys
-- Add `.gitai.yaml` to `.gitignore` if it contains local secrets
-- Prefer `GITAI_API_KEY` in CI and shared environments
-- `gitai config show` masks the key (`sk-o...abcd`)
+- **Never** commit `config.yaml` or `.openbench.yaml` with API keys
+- Add `.openbench.yaml` to `.gitignore` if it contains local secrets
+- Prefer `OB_API_KEY` in CI and shared environments
+- `ob config show` masks the key (`sk-o...abcd`)
 - Global config is saved with permission `0600` (user read only)
 
 ---

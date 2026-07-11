@@ -33,7 +33,7 @@ Regras:
 - Idioma: `)
 	b.WriteString(lang)
 	b.WriteString(`
-- steps: 2-5 passos acionáveis; prefira comandos git/gitai quando aplicável
+- steps: 2-5 passos acionáveis; prefira comandos git/ob quando aplicável
 - se commits locais parecem artefatos de build, sugira descartá-los com cautela
 - marque reset --hard ou branch -D em warnings, nunca como passo casual
 - não invente arquivos ou commits que não aparecem nos fatos
