@@ -436,6 +436,31 @@ func (s *AppService) DockerRecreate(service string) (*desktop.DockerActionResult
 	return res, nil
 }
 
+// ListDockerPresets returns project docker command presets.
+func (s *AppService) ListDockerPresets() ([]desktop.DockerPresetView, error) {
+	return desktop.ListDockerPresets(s.currentPath())
+}
+
+// ListDockerKits returns built-in kits available for import.
+func (s *AppService) ListDockerKits() ([]desktop.DockerKitView, error) {
+	return desktop.ListDockerKits()
+}
+
+// ImportDockerKit merges a built-in kit into the open project's presets.
+func (s *AppService) ImportDockerKit(kitID string) (*desktop.DockerImportResult, error) {
+	return desktop.ImportDockerKit(s.currentPath(), kitID)
+}
+
+// DockerRunPreset runs a one-shot preset (or signals interactive shell via result.interactive).
+func (s *AppService) DockerRunPreset(service, presetID string) (*desktop.DockerExecResult, error) {
+	return desktop.RunDockerPreset(s.currentPath(), service, presetID)
+}
+
+// DockerExecCommand runs an arbitrary one-shot command in a service.
+func (s *AppService) DockerExecCommand(service, command string) (*desktop.DockerExecResult, error) {
+	return desktop.RunDockerExecCommand(s.currentPath(), service, command)
+}
+
 func (s *AppService) afterDocker(res *desktop.DockerActionResult) {
 	if res != nil && res.Dashboard != nil {
 		s.setProjectPath(res.Dashboard.Path)

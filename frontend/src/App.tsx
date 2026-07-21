@@ -76,7 +76,11 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { TerminalPanel } from "@/components/terminal-panel"
+import { DockerEnvironmentSheet } from "@/components/docker-environment-sheet"
+import {
+  TerminalPanel,
+  type TerminalSessionSpec,
+} from "@/components/terminal-panel"
 import { UsageChartPanel } from "@/components/usage-chart"
 import {
   BRANCH_TEMPLATES,
@@ -89,6 +93,7 @@ import {
   ChartColumn,
   ChevronDown,
   ChevronLeft,
+  CircleHelp,
   Container,
   Download,
   ExternalLink,
@@ -274,6 +279,13 @@ function contextLevelStyles(level: string): {
   }
 }
 
+function formatContextBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B"
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 function ContextIndexPanel({
   index,
   onRecommendCommit,
@@ -285,12 +297,71 @@ function ContextIndexPanel({
 }) {
   const styles = contextLevelStyles(index.level)
   const score = Math.max(0, Math.min(100, index.score ?? 0))
+  const estimated = formatContextBytes(index.estimatedBytes ?? 0)
+  const maxDiff = formatContextBytes(index.maxDiffBytes ?? 0)
+  const modelWindow = index.modelContextWindow?.trim() || ""
+  const model = index.model?.trim() || ""
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-foreground">Índice de contexto</span>
+          <Tooltip>
+            <TooltipTrigger
+              delay={200}
+              render={
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground hover:text-foreground/90"
+                />
+              }
+            >
+              Índice de contexto
+              <CircleHelp className="size-3.5 text-muted-foreground" aria-hidden />
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              align="start"
+              className="flex max-w-xs flex-col items-stretch gap-2 px-3 py-2.5 text-left leading-snug"
+            >
+              <p className="font-medium">O que mede</p>
+              <p className="opacity-90">
+                O peso do diff que a IA verá no próximo commit.
+              </p>
+
+              <p className="font-medium">Como calcula</p>
+              <p className="opacity-90">
+                Linhas (+/−), arquivos, áreas distintas e proximidade do truncamento
+                (`max_diff_bytes`).
+              </p>
+
+              <p className="font-medium">Estimado agora</p>
+              <p className="font-mono opacity-90">{estimated}</p>
+
+              <p className="font-medium">Limite enviado</p>
+              <p className="font-mono opacity-90">{maxDiff}</p>
+
+              {model ? (
+                <>
+                  <p className="font-medium">Modelo</p>
+                  <p className="font-mono opacity-90">{model}</p>
+                </>
+              ) : null}
+
+              {modelWindow ? (
+                <>
+                  <p className="font-medium">Janela do modelo</p>
+                  <p className="font-mono opacity-90">~{modelWindow}</p>
+                </>
+              ) : null}
+
+              <p className="font-medium">Dica</p>
+              <p className="opacity-90">
+                Janela maior aguenta mais escopo; o openbench ainda respeita
+                `max_diff_bytes`. Em atenção/crítico, prefira commits menores.
+              </p>
+            </TooltipContent>
+          </Tooltip>
           <Badge variant={styles.badge} className="font-mono text-[10px]">
             {score}%
           </Badge>
@@ -795,6 +866,8 @@ function App() {
   const [prOpen, setPrOpen] = useState(false)
   const [recreateOpen, setRecreateOpen] = useState(false)
   const [recreateService, setRecreateService] = useState("")
+  const [dockerEnvOpen, setDockerEnvOpen] = useState(false)
+  const [termSession, setTermSession] = useState<TerminalSessionSpec>({ kind: "host" })
 
   // Sync dialog
   const [syncOpen, setSyncOpen] = useState(false)
@@ -1313,6 +1386,15 @@ function App() {
     await dockerAction(() => AppService.DockerRecreate(svc))
   }
 
+  const openDockerShell = (service: string, presetId?: string) => {
+    setTermSession({
+      kind: "docker",
+      service,
+      presetId: presetId?.trim() || undefined,
+    })
+    setTerminalOpen(true)
+  }
+
   /* ---------------------------- settings ---------------------------- */
 
   const openSettings = async () => {
@@ -1383,6 +1465,12 @@ function App() {
   }
 
   /* --------------------------- lifecycle ---------------------------- */
+
+  // Host shell when switching / closing projects.
+  useEffect(() => {
+    setTermSession({ kind: "host" })
+    setDockerEnvOpen(false)
+  }, [dash?.path])
 
   // After the fast dashboard lands, load Docker + open PR off the critical path.
   useEffect(() => {
@@ -1687,7 +1775,11 @@ function App() {
 
             {dockerVisible && (
               <Card size="sm" className="shrink-0">
-                <CardHeader>
+                <CardHeader
+                  className="cursor-pointer rounded-t-xl hover:bg-muted/40"
+                  onClick={() => !dockerLoading && setDockerEnvOpen(true)}
+                  title="Abrir containers, shell e presets"
+                >
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <Container className="size-4 text-muted-foreground" />
                     Docker
@@ -1704,6 +1796,9 @@ function App() {
                         <span className="ml-1 truncate text-xs font-normal text-muted-foreground">
                           {dash.docker.summary}
                         </span>
+                        <span className="ml-auto text-[11px] font-normal text-muted-foreground">
+                          containers →
+                        </span>
                       </>
                     )}
                   </CardTitle>
@@ -1715,7 +1810,10 @@ function App() {
                     <>
                       <Button
                         size="xs"
-                        onClick={() => void dockerAction(() => AppService.DockerUp(false))}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void dockerAction(() => AppService.DockerUp(false))
+                        }}
                         disabled={busy}
                       >
                         <Play />
@@ -1724,7 +1822,10 @@ function App() {
                       <Button
                         size="xs"
                         variant="outline"
-                        onClick={() => void dockerAction(() => AppService.DockerUp(true))}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void dockerAction(() => AppService.DockerUp(true))
+                        }}
                         disabled={busy}
                       >
                         Up --build
@@ -1732,7 +1833,10 @@ function App() {
                       <Button
                         size="xs"
                         variant="outline"
-                        onClick={() => void dockerAction(() => AppService.DockerStart())}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void dockerAction(() => AppService.DockerStart())
+                        }}
                         disabled={busy}
                       >
                         Start
@@ -1740,7 +1844,10 @@ function App() {
                       <Button
                         size="xs"
                         variant="outline"
-                        onClick={() => void dockerAction(() => AppService.DockerStop())}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void dockerAction(() => AppService.DockerStop())
+                        }}
                         disabled={busy}
                       >
                         <Square />
@@ -1749,7 +1856,10 @@ function App() {
                       <Button
                         size="xs"
                         variant="outline"
-                        onClick={openRecreate}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openRecreate()
+                        }}
                         disabled={busy || !(dash.docker.services?.length)}
                       >
                         <RefreshCw />
@@ -1758,7 +1868,10 @@ function App() {
                       <Button
                         size="xs"
                         variant="destructive"
-                        onClick={() => void dockerAction(() => AppService.DockerDown())}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void dockerAction(() => AppService.DockerDown())
+                        }}
                         disabled={busy}
                       >
                         Down
@@ -2634,6 +2747,16 @@ function App() {
         </DialogContent>
       </Dialog>
 
+      <DockerEnvironmentSheet
+        open={dockerEnvOpen}
+        onOpenChange={setDockerEnvOpen}
+        docker={dash?.docker}
+        busy={busy}
+        onOpenDockerShell={openDockerShell}
+        onError={(msg) => setError(msg)}
+        onStatus={() => setError(null)}
+      />
+
       <Dialog open={recreateOpen} onOpenChange={setRecreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -2693,7 +2816,12 @@ function App() {
           <span className="text-[11px] text-muted-foreground">shell</span>
         </SidebarHeader>
         <SidebarContent className="overflow-hidden p-0">
-          <TerminalPanel projectPath={dash?.path ?? null} visible={terminalOpen} />
+          <TerminalPanel
+            projectPath={dash?.path ?? null}
+            visible={terminalOpen}
+            session={termSession}
+            onResetToHost={() => setTermSession({ kind: "host" })}
+          />
         </SidebarContent>
         <SidebarRail />
       </Sidebar>

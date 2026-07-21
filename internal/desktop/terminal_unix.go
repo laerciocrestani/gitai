@@ -14,20 +14,58 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	dockerpkg "github.com/laerciocrestani/openbench/internal/docker"
 )
 
-// TerminalSession manages an interactive login shell (PTY) in a project directory.
+// TerminalSession manages an interactive PTY (host shell or docker exec).
 type TerminalSession struct {
 	mu     sync.Mutex
 	ptmx   *os.File
 	cmd    *exec.Cmd
 	cwd    string
+	label  string
 	closed bool
 	emit   func(event string, data string)
 }
 
 // NewTerminalSession starts $SHELL (or zsh/bash) as an interactive login shell.
 func NewTerminalSession(cwd string, cols, rows uint16, emit func(event string, data string)) (*TerminalSession, error) {
+	shell, args := resolveShell()
+	cmd := exec.Command(shell, args...)
+	cmd.Dir = cwd
+	cmd.Env = append(os.Environ(),
+		"TERM=xterm-256color",
+		"COLORTERM=truecolor",
+	)
+	return startTerminalSession(cwd, "host", cmd, cols, rows, emit)
+}
+
+// NewDockerShellSession starts an interactive docker compose exec in a PTY.
+// command is the argv after the service name (default: sh, with bash fallback on start failure handled by caller).
+func NewDockerShellSession(cwd, composeFile, service string, command []string, cols, rows uint16, emit func(event string, data string)) (*TerminalSession, error) {
+	service = strings.TrimSpace(service)
+	if service == "" {
+		return nil, fmt.Errorf("serviço não informado")
+	}
+	if len(command) == 0 {
+		command = []string{"sh"}
+	}
+	cmd, err := dockerpkg.BuildExecCommand(composeFile, service, true, command...)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Env = append(os.Environ(),
+		"TERM=xterm-256color",
+		"COLORTERM=truecolor",
+	)
+	label := "docker:" + service
+	if len(command) > 0 && command[0] != "sh" && command[0] != "bash" {
+		label = "docker:" + service + ":" + strings.Join(command, " ")
+	}
+	return startTerminalSession(cwd, label, cmd, cols, rows, emit)
+}
+
+func startTerminalSession(cwd, label string, cmd *exec.Cmd, cols, rows uint16, emit func(event string, data string)) (*TerminalSession, error) {
 	if cwd == "" {
 		return nil, fmt.Errorf("cwd vazio — abra um projeto")
 	}
@@ -45,14 +83,9 @@ func NewTerminalSession(cwd string, cols, rows uint16, emit func(event string, d
 	if rows == 0 {
 		rows = 24
 	}
-
-	shell, args := resolveShell()
-	cmd := exec.Command(shell, args...)
-	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(),
-		"TERM=xterm-256color",
-		"COLORTERM=truecolor",
-	)
+	if cmd.Dir == "" {
+		cmd.Dir = cwd
+	}
 
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: rows, Cols: cols})
 	if err != nil {
@@ -60,10 +93,11 @@ func NewTerminalSession(cwd string, cols, rows uint16, emit func(event string, d
 	}
 
 	s := &TerminalSession{
-		ptmx: ptmx,
-		cmd:  cmd,
-		cwd:  cwd,
-		emit: emit,
+		ptmx:  ptmx,
+		cmd:   cmd,
+		cwd:   cwd,
+		label: label,
+		emit:  emit,
 	}
 	go s.readLoop()
 	go s.waitLoop()
@@ -194,6 +228,14 @@ func (s *TerminalSession) Resize(cols, rows uint16) error {
 // Cwd returns the session working directory.
 func (s *TerminalSession) Cwd() string {
 	return s.cwd
+}
+
+// Label returns a short session descriptor (host / docker:svc).
+func (s *TerminalSession) Label() string {
+	if s == nil {
+		return ""
+	}
+	return s.label
 }
 
 // Close terminates the shell and releases the PTY.

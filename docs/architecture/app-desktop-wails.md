@@ -224,7 +224,7 @@ docs/
 | **1** | Open project + 1 dashboard via `LoadWorkspaceSnapshot` | ✅ dialog nativo + dashboard (branch/dirty/docker/PR) |
 | **2** | Commit Preview/Confirm + review obrigatório + validate check | ✅ modal + prefs `validate_commit` |
 | **3** | PR + onboarding gh/key | ✅ modal PR + Setup (API key / gh / remote) |
-| **4** | Docker condicional + ações | ✅ painel Up/Down/Stop/Start/Recreate + tray condicional |
+| **4** | Docker condicional + ações | ✅ lifecycle + sheet containers/shell/presets (kits) + modal resumo; ver ADR-006 |
 | **5** | Multi-projeto pinned + StatusHub | ✅ abas pinned (máx. 8), poll paralelo, tray Projetos |
 | **6** | Tray atalhos + prefs persistidas | ✅ Settings modal, tray status/atalhos, aliases pinned |
 | **7** | Auto-update (GitHub) + package CI | ✅ Updater + Settings + `docs/release-desktop.md` |

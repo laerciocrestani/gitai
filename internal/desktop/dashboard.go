@@ -41,17 +41,19 @@ type Dashboard struct {
 
 // CommitContextIndex is the desktop DTO for commit-context health.
 type CommitContextIndex struct {
-	Score           int    `json:"score"`
-	Level           string `json:"level"`
-	Label           string `json:"label"`
-	RecommendCommit bool   `json:"recommendCommit"`
-	FileCount       int    `json:"fileCount"`
-	Insertions      int    `json:"insertions"`
-	Deletions       int    `json:"deletions"`
-	AreaCount       int    `json:"areaCount"`
-	EstimatedBytes  int    `json:"estimatedBytes"`
-	MaxDiffBytes    int    `json:"maxDiffBytes"`
-	NearTruncate    bool   `json:"nearTruncate"`
+	Score              int    `json:"score"`
+	Level              string `json:"level"`
+	Label              string `json:"label"`
+	RecommendCommit    bool   `json:"recommendCommit"`
+	FileCount          int    `json:"fileCount"`
+	Insertions         int    `json:"insertions"`
+	Deletions          int    `json:"deletions"`
+	AreaCount          int    `json:"areaCount"`
+	EstimatedBytes     int    `json:"estimatedBytes"`
+	MaxDiffBytes       int    `json:"maxDiffBytes"`
+	NearTruncate       bool   `json:"nearTruncate"`
+	Model              string `json:"model,omitempty"`
+	ModelContextWindow string `json:"modelContextWindow,omitempty"`
 }
 
 // DockerStatus summarizes compose/daemon state for the dashboard.
@@ -69,8 +71,11 @@ type DockerStatus struct {
 
 // DockerServiceView is one compose service for UI selectors.
 type DockerServiceView struct {
-	Name  string `json:"name"`
-	State string `json:"state"`
+	Name      string `json:"name"`
+	State     string `json:"state"`
+	Container string `json:"container,omitempty"`
+	Ports     string `json:"ports,omitempty"`
+	Health    string `json:"health,omitempty"`
 }
 
 // PRStatus is the open pull request, if any.
@@ -179,7 +184,7 @@ func FromSnapshot(projectPath string, snap *app.WorkspaceSnapshot) *Dashboard {
 	}
 
 	if idx := app.BuildCommitContextIndex(snap.Overview, snap.Config); idx != nil {
-		d.ContextIndex = &CommitContextIndex{
+		ci := &CommitContextIndex{
 			Score:           idx.Score,
 			Level:           idx.Level,
 			Label:           idx.Label,
@@ -192,6 +197,11 @@ func FromSnapshot(projectPath string, snap *app.WorkspaceSnapshot) *Dashboard {
 			MaxDiffBytes:    idx.MaxDiffBytes,
 			NearTruncate:    idx.NearTruncate,
 		}
+		if snap.Config != nil {
+			ci.Model = snap.Config.Model
+			ci.ModelContextWindow = app.ModelContextWindow(snap.Config.Model)
+		}
+		d.ContextIndex = ci
 	}
 
 	d.Docker = mapDocker(snap.Docker, snap.HasDocker)
@@ -240,8 +250,11 @@ func mapDocker(ov *dockerpkg.Overview, hasDocker bool) DockerStatus {
 			continue
 		}
 		st.Services = append(st.Services, DockerServiceView{
-			Name:  c.Service,
-			State: c.State,
+			Name:      c.Service,
+			State:     c.State,
+			Container: c.Name,
+			Ports:     c.Ports,
+			Health:    c.Health,
 		})
 	}
 	// Show docker block when CLI exists (even if daemon down) — matches discovery.

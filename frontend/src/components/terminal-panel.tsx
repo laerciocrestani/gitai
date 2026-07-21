@@ -9,6 +9,10 @@ import { Events } from "@wailsio/runtime"
 import { Button } from "@/components/ui/button"
 import { RotateCcw, TerminalSquare } from "lucide-react"
 
+export type TerminalSessionSpec =
+  | { kind: "host" }
+  | { kind: "docker"; service: string; presetId?: string }
+
 function decodeBase64(b64: string): string {
   const bin = atob(b64)
   const bytes = new Uint8Array(bin.length)
@@ -16,12 +20,33 @@ function decodeBase64(b64: string): string {
   return new TextDecoder("utf-8", { fatal: false }).decode(bytes)
 }
 
+function sessionKey(projectPath: string | null, session: TerminalSessionSpec): string {
+  if (!projectPath) return ""
+  if (session.kind === "docker") {
+    return `docker:${projectPath}:${session.service}:${session.presetId ?? ""}`
+  }
+  return `host:${projectPath}`
+}
+
+function sessionLabel(session: TerminalSessionSpec, projectPath: string | null): string {
+  if (!projectPath) return "sem projeto"
+  if (session.kind === "docker") {
+    const extra = session.presetId ? ` · ${session.presetId}` : ""
+    return `docker:${session.service}${extra}`
+  }
+  return projectPath
+}
+
 export function TerminalPanel({
   projectPath,
   visible,
+  session,
+  onResetToHost,
 }: {
   projectPath: string | null
   visible: boolean
+  session: TerminalSessionSpec
+  onResetToHost?: () => void
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
@@ -110,7 +135,8 @@ export function TerminalPanel({
 
   useEffect(() => {
     if (!visible || !projectPath || !termRef.current || !fitRef.current) return
-    if (startedFor.current === projectPath) {
+    const key = sessionKey(projectPath, session)
+    if (startedFor.current === key) {
       fitRef.current.fit()
       termRef.current.focus()
       return
@@ -123,9 +149,17 @@ export function TerminalPanel({
       const rows = dims?.rows ?? 24
       termRef.current?.reset()
       try {
-        await AppService.TerminalStart(cols, rows)
-        startedFor.current = projectPath
-        // Defer focus until after layout / WebView paint.
+        if (session.kind === "docker") {
+          await AppService.DockerShellStart(
+            session.service,
+            cols,
+            rows,
+            session.presetId ?? ""
+          )
+        } else {
+          await AppService.TerminalStart(cols, rows)
+        }
+        startedFor.current = key
         requestAnimationFrame(() => termRef.current?.focus())
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -134,7 +168,7 @@ export function TerminalPanel({
       }
     }
     void start()
-  }, [visible, projectPath])
+  }, [visible, projectPath, session])
 
   const restart = async () => {
     if (!projectPath || !fitRef.current || !termRef.current) return
@@ -142,8 +176,18 @@ export function TerminalPanel({
     const dims = fitRef.current.proposeDimensions()
     termRef.current.reset()
     try {
-      await AppService.TerminalRestart(dims?.cols ?? 80, dims?.rows ?? 24)
-      startedFor.current = projectPath
+      if (session.kind === "docker") {
+        await AppService.DockerShellStart(
+          session.service,
+          dims?.cols ?? 80,
+          dims?.rows ?? 24,
+          session.presetId ?? ""
+        )
+        startedFor.current = sessionKey(projectPath, session)
+      } else {
+        await AppService.TerminalRestart(dims?.cols ?? 80, dims?.rows ?? 24)
+        startedFor.current = sessionKey(projectPath, session)
+      }
       requestAnimationFrame(() => termRef.current?.focus())
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -157,14 +201,24 @@ export function TerminalPanel({
         <TerminalSquare className="size-3.5 text-muted-foreground" />
         <span
           className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground"
-          title={projectPath ?? undefined}
+          title={sessionLabel(session, projectPath)}
         >
-          {projectPath ?? "sem projeto"}
+          {sessionLabel(session, projectPath)}
         </span>
+        {session.kind === "docker" && onResetToHost && (
+          <Button
+            variant="ghost"
+            size="xs"
+            title="Voltar ao shell do projeto"
+            onClick={onResetToHost}
+          >
+            host
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon-xs"
-          title="Reiniciar shell"
+          title="Reiniciar sessão"
           disabled={!projectPath}
           onClick={() => void restart()}
         >
