@@ -649,6 +649,43 @@ function pullNeedsAttention(dash: Dashboard): boolean {
   return dash.behind > 0 || dash.baseBehind > 0
 }
 
+type NextToolbarStep = "commit" | "push" | "pull" | "pr" | null
+
+/** Single recommended toolbar action based on repo state. */
+function nextToolbarStep(dash: Dashboard | null): NextToolbarStep {
+  if (!dash || dash.detached) return null
+  if (dash.dirty) return "commit"
+  const pushCount = dash.hasUpstream ? dash.ahead : dash.commitsAheadOfBase
+  if (pushCount > 0) return "push"
+  if (dash.behind > 0) return "pull"
+  if (
+    !isOnBase(dash) &&
+    dash.commitsAheadOfBase > 0 &&
+    dash.hasBranchDiff &&
+    dash.hasUpstream &&
+    dash.ahead === 0 &&
+    !dash.openPR?.url
+  ) {
+    return "pr"
+  }
+  return null
+}
+
+function nextStepTitle(step: NextToolbarStep): string {
+  switch (step) {
+    case "commit":
+      return "Próximo passo: Commit"
+    case "push":
+      return "Próximo passo: Push"
+    case "pull":
+      return "Próximo passo: Pull"
+    case "pr":
+      return "Próximo passo: abrir Pull Request"
+    default:
+      return ""
+  }
+}
+
 function DashboardView({
   dash,
   busy,
@@ -1893,6 +1930,7 @@ function App() {
       : dash.commitsAheadOfBase
     : 0
   const canPushOnly = Boolean(dash) && !dash!.detached && pushAheadCount > 0
+  const suggestedStep = nextToolbarStep(dash)
 
   const confirmNewBranch = async () => {
     const name = newBranchName.trim()
@@ -2551,9 +2589,17 @@ function App() {
               <div className="flex items-stretch">
                 <Button
                   size="sm"
-                  className="rounded-r-none"
+                  className={cn(
+                    "rounded-r-none",
+                    suggestedStep === "commit" && "next-step-pulse",
+                  )}
                   onClick={() => void startCommit()}
                   disabled={busy}
+                  title={
+                    suggestedStep === "commit"
+                      ? nextStepTitle("commit")
+                      : undefined
+                  }
                 >
                   <GitCommit />
                   Commit
@@ -2627,10 +2673,13 @@ function App() {
                   variant="outline"
                   onClick={() => void runPushOnly()}
                   disabled={busy}
+                  className={cn(suggestedStep === "push" && "next-step-pulse")}
                   title={
-                    dash.hasUpstream
-                      ? `Push ↑${pushAheadCount} para o upstream`
-                      : `Primeiro push de ${dash.branch} (↑${pushAheadCount} vs ${dash.baseBranch || "main"})`
+                    suggestedStep === "push"
+                      ? nextStepTitle("push")
+                      : dash.hasUpstream
+                        ? `Push ↑${pushAheadCount} para o upstream`
+                        : `Primeiro push de ${dash.branch} (↑${pushAheadCount} vs ${dash.baseBranch || "main"})`
                   }
                 >
                   <ArrowUp />
@@ -2645,12 +2694,15 @@ function App() {
                 variant="outline"
                 onClick={() => void runPull()}
                 disabled={busy || pullBusy || syncBusy || dash.dirty}
+                className={cn(suggestedStep === "pull" && "next-step-pulse")}
                 title={
-                  dash.dirty
-                    ? "Working tree dirty — commit ou stash antes de puxar"
-                    : pullNeedsAttention(dash)
-                      ? `Pull: branch ↓${dash.behind || 0} · ${dash.baseBranch || "main"} ↓${dash.baseBehind || 0}`
-                      : `Fetch + atualizar branch / ${dash.baseBranch || "main"}`
+                  suggestedStep === "pull"
+                    ? nextStepTitle("pull")
+                    : dash.dirty
+                      ? "Working tree dirty — commit ou stash antes de puxar"
+                      : pullNeedsAttention(dash)
+                        ? `Pull: branch ↓${dash.behind || 0} · ${dash.baseBranch || "main"} ↓${dash.baseBehind || 0}`
+                        : `Fetch + atualizar branch / ${dash.baseBranch || "main"}`
                 }
               >
                 {pullBusy ? <Loader2 className="animate-spin" /> : <ArrowDown />}
@@ -2711,9 +2763,27 @@ function App() {
                   </Badge>
                 )}
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => void startPR()} disabled={busy}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void startPR()}
+                disabled={busy}
+                className={cn(suggestedStep === "pr" && "next-step-pulse")}
+                title={
+                  suggestedStep === "pr"
+                    ? nextStepTitle("pr")
+                    : dash.openPR?.url
+                      ? `PR #${dash.openPR.number} já aberta`
+                      : "Criar ou revisar Pull Request"
+                }
+              >
                 <GitPullRequest />
                 Pull Request
+                {suggestedStep === "pr" ? (
+                  <Badge variant="outline" className="ml-1 h-5 px-1.5 text-[10px]">
+                    próximo
+                  </Badge>
+                ) : null}
               </Button>
               <Button
                 size="sm"
