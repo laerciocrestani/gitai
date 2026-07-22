@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bufio"
 	"bytes"
 	"os"
 	"os/exec"
@@ -11,17 +12,11 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	tea "github.com/charmbracelet/bubbletea"
+	gitpkg "github.com/laerciocrestani/openbench/internal/git"
 )
 
-var skipWatchDirs = map[string]bool{
-	".git":         true,
-	"node_modules": true,
-	"vendor":       true,
-	".cache":       true,
-	"dist":         true,
-	"build":        true,
-	"target":       true,
-}
+// Watch git metadata + cheap status fingerprint poll. Recursive directory
+// watches exhaust FDs on macOS kqueue (one FD per file in each watched dir).
 
 type repoWatcher struct {
 	done chan struct{}
@@ -34,14 +29,12 @@ func startRepoWatcher(p *tea.Program, root string) (*repoWatcher, error) {
 		return nil, err
 	}
 
-	rw := &repoWatcher{done: make(chan struct{})}
-
-	if err := addWatchTree(watcher, root); err != nil {
-		watcher.Close()
-		return nil, err
+	for _, path := range gitWatchPaths(root) {
+		_ = watcher.Add(path)
 	}
 
-	go rw.loop(p, watcher)
+	rw := &repoWatcher{done: make(chan struct{})}
+	go rw.loop(p, root, watcher)
 	return rw, nil
 }
 
@@ -49,10 +42,14 @@ func (rw *repoWatcher) Close() {
 	rw.once.Do(func() { close(rw.done) })
 }
 
-func (rw *repoWatcher) loop(p *tea.Program, watcher *fsnotify.Watcher) {
+func (rw *repoWatcher) loop(p *tea.Program, root string, watcher *fsnotify.Watcher) {
 	defer watcher.Close()
 
-	var timer *time.Timer
+	var (
+		timer  *time.Timer
+		lastFP string
+		haveFP bool
+	)
 
 	resetDebounce := func() {
 		if timer != nil {
@@ -68,6 +65,31 @@ func (rw *repoWatcher) loop(p *tea.Program, watcher *fsnotify.Watcher) {
 		})
 	}
 
+	pollFingerprint := func() {
+		fp, err := gitpkg.StatusFingerprintAt(root)
+		if err != nil {
+			return
+		}
+		if !haveFP {
+			lastFP = fp
+			haveFP = true
+			return
+		}
+		if fp == lastFP {
+			return
+		}
+		lastFP = fp
+		resetDebounce()
+	}
+
+	if fp, err := gitpkg.StatusFingerprintAt(root); err == nil {
+		lastFP = fp
+		haveFP = true
+	}
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-rw.done:
@@ -75,6 +97,9 @@ func (rw *repoWatcher) loop(p *tea.Program, watcher *fsnotify.Watcher) {
 				timer.Stop()
 			}
 			return
+
+		case <-ticker.C:
+			pollFingerprint()
 
 		case _, ok := <-watcher.Errors:
 			if !ok {
@@ -88,36 +113,66 @@ func (rw *repoWatcher) loop(p *tea.Program, watcher *fsnotify.Watcher) {
 			if event.Has(fsnotify.Chmod) && !event.Has(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) {
 				continue
 			}
-			if event.Op&fsnotify.Create != 0 {
-				if info, err := os.Stat(event.Name); err == nil && info.IsDir() && !shouldSkipWatchDir(info.Name()) {
-					_ = addWatchTree(watcher, event.Name)
-				}
+			if fp, err := gitpkg.StatusFingerprintAt(root); err == nil {
+				lastFP = fp
+				haveFP = true
 			}
 			resetDebounce()
 		}
 	}
 }
 
-func addWatchTree(watcher *fsnotify.Watcher, root string) error {
-	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		if path != root && shouldSkipWatchDir(d.Name()) {
-			return filepath.SkipDir
-		}
-		if err := watcher.Add(path); err != nil {
-			return nil
-		}
+func gitWatchPaths(root string) []string {
+	gitDir, err := resolveGitDir(root)
+	if err != nil || gitDir == "" {
 		return nil
-	})
+	}
+	candidates := []string{
+		filepath.Join(gitDir, "HEAD"),
+		filepath.Join(gitDir, "index"),
+		filepath.Join(gitDir, "COMMIT_EDITMSG"),
+		filepath.Join(gitDir, "packed-refs"),
+		filepath.Join(gitDir, "refs", "heads"),
+	}
+	out := make([]string, 0, len(candidates))
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
-func shouldSkipWatchDir(name string) bool {
-	return skipWatchDirs[name]
+func resolveGitDir(root string) (string, error) {
+	gitPath := filepath.Join(root, ".git")
+	fi, err := os.Lstat(gitPath)
+	if err != nil {
+		return "", err
+	}
+	if fi.IsDir() {
+		return gitPath, nil
+	}
+	f, err := os.Open(gitPath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if len(line) < 8 || !strings.EqualFold(line[:7], "gitdir:") {
+			continue
+		}
+		dir := strings.TrimSpace(line[7:])
+		if dir == "" {
+			continue
+		}
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(root, dir)
+		}
+		return filepath.Clean(dir), nil
+	}
+	return "", os.ErrNotExist
 }
 
 func repoRoot() (string, error) {
