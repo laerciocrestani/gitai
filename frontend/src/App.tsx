@@ -661,8 +661,25 @@ function prMergeBlocked(dash: Dashboard | null): string | undefined {
   return undefined
 }
 
+/**
+ * LoadDashboard skips open PR (slow gh). Keep the last known PR/docker while the
+ * same branch is open so toolbar next-step doesn't flicker to "Pull Request".
+ */
+function mergeFastDashboard(prev: Dashboard | null, next: Dashboard): Dashboard {
+  if (!prev || prev.path !== next.path) return next
+  const sameBranch = prev.branch === next.branch && !next.detached
+  const dockerStub =
+    next.hasDocker &&
+    (!next.docker || next.docker.summary === "carregando…" || next.docker.total === 0)
+  return {
+    ...next,
+    openPR: next.openPR ?? (sameBranch ? prev.openPR : undefined),
+    docker: dockerStub && prev.docker?.total ? prev.docker : next.docker,
+  }
+}
+
 /** Single recommended toolbar action based on repo state. */
-function nextToolbarStep(dash: Dashboard | null): NextToolbarStep {
+function nextToolbarStep(dash: Dashboard | null, openPRReady = true): NextToolbarStep {
   if (!dash || dash.detached) return null
   if (dash.dirty) return "commit"
   const pushCount = dash.hasUpstream ? dash.ahead : dash.commitsAheadOfBase
@@ -676,6 +693,8 @@ function nextToolbarStep(dash: Dashboard | null): NextToolbarStep {
     dash.ahead === 0 &&
     !dash.openPR?.url
   ) {
+    // Don't pulse "abrir PR" until gh confirms there is no open PR.
+    if (!openPRReady) return null
     return "pr"
   }
   if (dash.openPR?.url && !prMergeBlocked(dash)) {
@@ -1181,6 +1200,16 @@ function App() {
 
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const [dash, setDash] = useState<Dashboard | null>(null)
+  const [openPRReady, setOpenPRReady] = useState(false)
+
+  const applyDashboard = useCallback((next: Dashboard | null) => {
+    if (!next) {
+      setDash(null)
+      setOpenPRReady(false)
+      return
+    }
+    setDash((prev) => mergeFastDashboard(prev, next))
+  }, [])
   const [statuses, setStatuses] = useState<ProjectStatus[]>([])
 
   const [busy, setBusy] = useState(false)
@@ -1330,7 +1359,8 @@ function App() {
     try {
       const d = await AppService.OpenProjectDialog()
       if (d) {
-        setDash(d)
+        setOpenPRReady(false)
+        applyDashboard(d)
         setTermSession({ kind: "host" })
         await refreshStatuses()
         await reloadPrefs()
@@ -1348,7 +1378,8 @@ function App() {
     try {
       const d = await AppService.OpenProject(path)
       if (d) {
-        setDash(d)
+        setOpenPRReady(false)
+        applyDashboard(d)
         setTermSession({ kind: "host" })
         await refreshStatuses()
         await reloadPrefs()
@@ -1366,7 +1397,8 @@ function App() {
     try {
       const d = await AppService.SwitchProject(path)
       if (d) {
-        setDash(d)
+        setOpenPRReady(false)
+        applyDashboard(d)
         setTermSession({ kind: "host" })
       }
       await refreshStatuses()
@@ -1381,7 +1413,7 @@ function App() {
   const unpinProject = async (path: string) => {
     try {
       const d = await AppService.UnpinProject(path)
-      setDash(d ?? null)
+      applyDashboard(d ?? null)
       await refreshStatuses()
       await reloadPrefs()
     } catch (e) {
@@ -1405,7 +1437,7 @@ function App() {
     setError(null)
     try {
       const d = await AppService.RefreshDashboard()
-      if (d) setDash(d)
+      if (d) applyDashboard(d)
       await AppService.RefreshProjectStatuses()
       await refreshStatuses()
     } catch (e) {
@@ -1418,7 +1450,7 @@ function App() {
   const closeProject = async () => {
     try {
       await AppService.CloseProject()
-      setDash(null)
+      applyDashboard(null)
       setChatOpen(false)
       setDoctorOpen(false)
       setDoctorReport(null)
@@ -1506,7 +1538,7 @@ function App() {
     setError(null)
     try {
       const d = await AppService.CreateBranch(name, from)
-      if (d) setDash(d)
+      if (d) applyDashboard(d)
       cancelCreateBranch()
       await loadBranches()
       await refreshStatuses()
@@ -1534,7 +1566,7 @@ function App() {
     setCheckoutConfirm(null)
     try {
       const d = await AppService.CheckoutBranch(name)
-      if (d) setDash(d)
+      if (d) applyDashboard(d)
       await loadBranches()
       await refreshStatuses()
     } catch (e) {
@@ -1689,7 +1721,7 @@ function App() {
         idx++
         if (adv.done) {
           if (adv.dashboard) {
-            setDash(adv.dashboard)
+            applyDashboard(adv.dashboard)
             await refreshStatuses()
           }
           await runDoctor(false, { quiet: true })
@@ -1716,7 +1748,7 @@ function App() {
       const res = await AppService.RunSync(syncMode, dash.baseBranch || "main")
       if (res) {
         setSyncResult(res)
-        if (res.dashboard) setDash(res.dashboard)
+        if (res.dashboard) applyDashboard(res.dashboard)
         await refreshStatuses()
       }
     } catch (e) {
@@ -1736,7 +1768,7 @@ function App() {
     setError(null)
     try {
       const res = await AppService.RunPull(dash.baseBranch || "main")
-      if (res?.dashboard) setDash(res.dashboard)
+      if (res?.dashboard) applyDashboard(res.dashboard)
       await refreshStatuses()
     } catch (e) {
       setError(errText(e))
@@ -1898,7 +1930,7 @@ function App() {
       : dash.commitsAheadOfBase
     : 0
   const canPushOnly = Boolean(dash) && !dash!.detached && pushAheadCount > 0
-  const suggestedStep = nextToolbarStep(dash)
+  const suggestedStep = nextToolbarStep(dash, openPRReady)
 
   const confirmNewBranch = async () => {
     const name = newBranchName.trim()
@@ -1907,7 +1939,7 @@ function App() {
     setError(null)
     try {
       const d = await AppService.CreateBranch(name, newBranchFrom || "main")
-      if (d) setDash(d)
+      if (d) applyDashboard(d)
       setNewBranchOpen(false)
       await openCommitPreview()
     } catch (e) {
@@ -2006,7 +2038,7 @@ function App() {
     setError(null)
     try {
       const res = (await fn()) as { dashboard?: Dashboard | null } | null
-      if (res?.dashboard) setDash(res.dashboard)
+      if (res?.dashboard) applyDashboard(res.dashboard)
       else await refresh()
     } catch (e) {
       setError(errText(e))
@@ -2158,6 +2190,7 @@ function App() {
   // After the fast dashboard lands, load Docker + open PR + commit calendar off the critical path.
   useEffect(() => {
     if (!dash?.path) {
+      setOpenPRReady(false)
       setDockerLoading(false)
       setCommitActivity(null)
       setTimeline(null)
@@ -2167,6 +2200,7 @@ function App() {
     const path = dash.path
     const token = `${path}|${dash.headHash}|${dash.branch}`
     let cancelled = false
+    setOpenPRReady(false)
     setDockerLoading(!!dash.hasDocker)
     setActivityLoading(true)
     setTimelineLimit(10)
@@ -2186,14 +2220,21 @@ function App() {
           )
         }
         tasks.push(
-          AppService.RefreshOpenPR().then((pr) => {
-            if (cancelled) return
-            setDash((prev) => {
-              if (!prev || prev.path !== path) return prev
-              if (`${prev.path}|${prev.headHash}|${prev.branch}` !== token) return prev
-              return { ...prev, openPR: pr ?? undefined }
+          AppService.RefreshOpenPR()
+            .then((pr) => {
+              if (cancelled) return
+              setDash((prev) => {
+                if (!prev || prev.path !== path) return prev
+                if (`${prev.path}|${prev.headHash}|${prev.branch}` !== token) return prev
+                return { ...prev, openPR: pr ?? undefined }
+              })
             })
-          }),
+            .catch(() => {
+              /* keep preserved openPR; still mark ready so UI can proceed */
+            })
+            .finally(() => {
+              if (!cancelled) setOpenPRReady(true)
+            }),
         )
         tasks.push(
           AppService.LoadCommitActivity(activityAuthorOnly).then((act) => {
@@ -2261,17 +2302,17 @@ function App() {
       try {
         if (action.type === "revert") {
           const res = await AppService.RevertTimelineCommit(action.hash, action.isMerge)
-          if (res?.dashboard) setDash(res.dashboard)
+          if (res?.dashboard) applyDashboard(res.dashboard)
         } else if (action.type === "reset") {
           const res = await AppService.ResetTimelineCommit(action.hash, action.mode)
-          if (res?.dashboard) setDash(res.dashboard)
+          if (res?.dashboard) applyDashboard(res.dashboard)
         } else if (action.type === "delete-branch") {
           const res = await AppService.DeleteTimelineBranch(action.name, true)
-          if (res?.dashboard) setDash(res.dashboard)
+          if (res?.dashboard) applyDashboard(res.dashboard)
         } else if (action.type === "merge-pr") {
           const res = await AppService.MergeTimelinePR(action.number, action.method)
           if (res?.dashboard) {
-            setDash(res.dashboard)
+            applyDashboard(res.dashboard)
           }
           try {
             const pr = await AppService.RefreshOpenPR()
@@ -2297,7 +2338,7 @@ function App() {
       setError(null)
       try {
         const d = await AppService.CheckoutBranch(name)
-        if (d) setDash(d)
+        if (d) applyDashboard(d)
         await refreshTimelineNow()
         await refreshStatuses()
       } catch (e) {
@@ -2387,7 +2428,7 @@ function App() {
     const offDashboard = Events.On("project:dashboard", (ev) => {
       const d = wailsEventData<Dashboard>(ev)
       if (d && typeof d === "object" && "path" in d) {
-        setDash(d)
+        applyDashboard(d)
         void actionsRef.current.refreshStatuses()
       }
     })
@@ -2406,7 +2447,7 @@ function App() {
       offDashboard()
       offUpdatePrompt()
     }
-  }, [])
+  }, [applyDashboard])
 
   /* ----------------------------- render ----------------------------- */
 
