@@ -95,6 +95,8 @@ import { ActivitySidebar, useActivitySidebar } from "@/components/activity-sideb
 import {
   ArrowDown,
   ArrowDownUp,
+  ArrowUp,
+  CheckCircle2,
   ChartColumn,
   ChevronDown,
   ChevronLeft,
@@ -1884,7 +1886,13 @@ function App() {
     }
   }
 
-  const canPushOnly = Boolean(dash) && !dash!.detached && dash!.ahead > 0
+  // Push when ↑ ahead of upstream, or first push of a feature with commits vs base.
+  const pushAheadCount = dash
+    ? dash.hasUpstream
+      ? dash.ahead
+      : dash.commitsAheadOfBase
+    : 0
+  const canPushOnly = Boolean(dash) && !dash!.detached && pushAheadCount > 0
 
   const confirmNewBranch = async () => {
     const name = newBranchName.trim()
@@ -2584,7 +2592,7 @@ function App() {
                         {canPushOnly && (
                           <DropdownMenuItem onClick={() => void runPushOnly()}>
                             Push
-                            {dash.ahead > 0 ? ` (↑${dash.ahead})` : ""}
+                            {pushAheadCount > 0 ? ` (↑${pushAheadCount})` : ""}
                           </DropdownMenuItem>
                         )}
                       </>
@@ -2602,7 +2610,8 @@ function App() {
                           onClick={() => void runPushOnly()}
                         >
                           Push
-                          {dash.ahead > 0 ? ` (↑${dash.ahead})` : ""}
+                          {pushAheadCount > 0 ? ` (↑${pushAheadCount})` : ""}
+                          {!dash.hasUpstream && pushAheadCount > 0 ? " · primeiro push" : ""}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => void startCommitAction("pr")}>
                           Commit & Create PR
@@ -2612,6 +2621,25 @@ function App() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+              {canPushOnly && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void runPushOnly()}
+                  disabled={busy}
+                  title={
+                    dash.hasUpstream
+                      ? `Push ↑${pushAheadCount} para o upstream`
+                      : `Primeiro push de ${dash.branch} (↑${pushAheadCount} vs ${dash.baseBranch || "main"})`
+                  }
+                >
+                  <ArrowUp />
+                  Push
+                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+                    ↑{pushAheadCount}
+                  </Badge>
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="outline"
@@ -2639,19 +2667,37 @@ function App() {
                 onClick={() => void openDoctor()}
                 disabled={busy || doctorBusy}
                 title={
-                  doctorReport && doctorReport.overall !== "ok"
-                    ? `Doctor: ${doctorReport.issues?.length ?? 0} problema(s) (${doctorReport.overall})`
-                    : "Saúde do repositório (doctor)"
+                  doctorReport?.overall === "ok"
+                    ? "Doctor: repositório saudável"
+                    : doctorReport && doctorReport.overall !== "ok"
+                      ? `Doctor: ${doctorReport.issues?.length ?? 0} problema(s) (${doctorReport.overall})`
+                      : "Saúde do repositório (doctor)"
                 }
                 className={cn(
+                  doctorReport?.overall === "ok" &&
+                    "border-emerald-500/60 bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/15 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-200",
                   doctorReport?.overall === "critical" &&
                     "border-destructive/60 bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
                   doctorReport?.overall === "warn" &&
                     "border-amber-500/60 bg-amber-500/10 text-amber-800 hover:bg-amber-500/15 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-200",
                 )}
               >
-                {doctorBusy ? <Loader2 className="animate-spin" /> : <Stethoscope />}
+                {doctorBusy ? (
+                  <Loader2 className="animate-spin" />
+                ) : doctorReport?.overall === "ok" ? (
+                  <CheckCircle2 />
+                ) : (
+                  <Stethoscope />
+                )}
                 Doctor
+                {doctorReport?.overall === "ok" ? (
+                  <Badge
+                    variant="outline"
+                    className="ml-1 h-5 border-emerald-500/50 bg-emerald-500/20 px-1.5 text-[10px] text-emerald-900 dark:text-emerald-200"
+                  >
+                    ok
+                  </Badge>
+                ) : null}
                 {doctorReport && doctorReport.overall !== "ok" && (
                   <Badge
                     variant={doctorReport.overall === "critical" ? "destructive" : "outline"}
